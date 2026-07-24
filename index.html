@@ -1,541 +1,648 @@
-<!doctype html>
+<!DOCTYPE html>
+
 <html lang="ko">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f6b83f">
-  <meta name="description" content="메이플 키우기 스펙 및 옵션 변경 비교 도구">
-  <title>메이플 키우기 스펙 연구소</title>
-  <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="icon" href="./assets/brand/representative.png">
-  <link rel="stylesheet" href="./styles.css">
-</head>
-<body>
-  <div class="app-shell">
-    <header class="topbar">
-      <div class="brand-lockup">
-        <img src="./assets/brand/representative.png" alt="메이플 키우기 연구소 대표 이미지" class="brand-avatar">
-        <div>
-          <p class="eyebrow">MAPLE IDLE SPEC LAB</p>
-          <h1>메이플 키우기 스펙 연구소</h1>
-          <p class="subtitle">수많은 실험 끝에 더 나은 선택을 찾기 위한 공간</p>
-        </div>
-      </div>
-      <div class="top-actions">
-        <button id="installBtn" class="button ghost hidden" type="button">앱으로 설치</button>
-        <button id="saveProfileBtn" class="button ghost" type="button">프로필 저장</button>
-        <label class="button ghost file-label">
-          프로필 열기
-          <input id="profileFile" type="file" accept=".json,application/json">
-        </label>
-        <button id="runCompareBtn" class="button primary" type="button">비교 실행</button>
-      </div>
-    </header>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport"/>
+<meta content="#f6b83f" name="theme-color"/>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
+<meta content="메이플 키우기 스펙 및 옵션 변경 비교 도구" name="description"/>
+<title>메이플 키우기 스펙 연구소</title>
+<link href="./manifest.webmanifest?v=1.0.0-dev.10" rel="manifest"/>
+<link href="./assets/brand/representative.png" rel="icon"/>
+<link href="./styles.css?v=1.0.0-dev.10" rel="stylesheet"/>
+<script>
+(function(){
+  const BUILD = "1.0.0-dev.10";
+  const isDev = location.pathname.toLowerCase().includes("maplespeclab-dev");
+  if (!isDev) return;
 
-    <nav class="tabs" aria-label="기능 탭">
-      <button class="tab active" data-tab="home" type="button">홈</button>
-      <button class="tab" data-tab="capture" type="button">이미지 가져오기</button>
-      <button class="tab" data-tab="stats" type="button">현재 스펙</button>
-      <button class="tab" data-tab="changes" type="button">변경 시뮬레이션</button>
-      <button class="tab" data-tab="results" type="button">분석 결과</button>
-      <button class="tab" data-tab="companions" type="button">동료</button>
-      <button class="tab" data-tab="help" type="button">도움말</button>
-      <button class="tab" data-tab="report" type="button">오류 제보</button>
-    </nav>
+  async function clearLegacyCaches(){
+    try {
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(reg => reg.unregister()));
+      }
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(key => caches.delete(key)));
+      }
+    } catch (_) {}
+  }
 
-    <main>
-      <section id="tab-home" class="tab-panel active">
-        <article class="hero-card">
-          <img src="./assets/brand/representative.png" alt="메이플 키우기 연구소 대표 이미지">
-          <div>
-            <p class="eyebrow">WELCOME TO MAPLE SPEC LAB</p>
-            <h2>현재 스펙부터 변경 결과까지, 한 흐름으로 연구하세요.</h2>
-            <p>이미지 OCR이 기본이지만 모든 항목을 직접 입력할 수도 있습니다. 입력된 이미지와 데이터는 현재 기기 안에서 처리됩니다.</p>
-            <div class="button-row">
-              <button class="button primary" type="button" data-go-tab="capture">이미지로 시작</button>
-              <button class="button ghost" type="button" data-go-tab="stats">직접 입력으로 시작</button>
-            </div>
-          </div>
-        </article>
+  async function checkLatest(){
+    try {
+      const response = await fetch("./version.json?ts=" + Date.now(), {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" }
+      });
+      if (!response.ok) return;
+      const info = await response.json();
+      if (!info || !info.version || info.version === BUILD) return;
+      const url = new URL(location.href);
+      url.searchParams.set("version", info.version);
+      url.searchParams.set("refresh", Date.now().toString());
+      location.replace(url.toString());
+    } catch (_) {}
+  }
 
-        <article class="notice-card strong-notice">
-          <strong>📢 연구소 운영 안내</strong>
-          <p>이 연구소는 개인의 호기심으로 시작한 개인 프로젝트입니다. 개인의 사정이나 변덕에 따라 연구소가 삭제되거나 추가 업데이트가 중단될 수 있습니다.</p>
-        </article>
-        <article class="notice-card caution-notice">
-          <strong>⚠ 계산 결과 안내</strong>
-          <p>계산 결과는 연구 목적으로 제공됩니다. 게임 업데이트나 계산식 변경으로 실제 결과와 차이가 생길 수 있으므로 중요한 결정 전에는 게임 내 수치를 함께 확인해 주세요.</p>
-        </article>
-
-        <div class="workflow-grid">
-          <button class="workflow-card" type="button" data-go-tab="stats"><span>1</span><strong>현재 스펙</strong><small>OCR 또는 직접 입력으로 기준값 등록</small></button>
-          <button class="workflow-card" type="button" data-go-tab="changes"><span>2</span><strong>변경 비교</strong><small>장비 · 어빌 · 동료의 A/B 차이 계산</small></button>
-          <button class="workflow-card" type="button" data-go-tab="results"><span>3</span><strong>결과 분석</strong><small>적용 후 스펙과 피해 변화 확인</small></button>
-          <button class="workflow-card" type="button" data-go-tab="help"><span>?</span><strong>사용 가이드</strong><small>처음부터 단계별로 자세히 보기</small></button>
-        </div>
-      </section>
-
-      <section id="tab-capture" class="tab-panel">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">LOCAL IMAGE INPUT</p>
-            <h2>이미지를 디바이스에서 가져오기</h2>
-            <p>업로드된 이미지는 서버로 전송하지 않고 현재 브라우저 안에서만 처리합니다.</p>
-          </div>
-          <div class="status-pill" id="ocrStatus">OCR 대기</div>
-        </div>
-
-        <div class="capture-grid">
-          <article class="panel drop-panel" id="dropZone">
-            <div class="drop-icon">＋</div>
-            <h3>파일·사진 추가</h3>
-            <p>PC에서는 드래그앤드롭 또는 파일 선택, 모바일에서는 사진첩·파일 선택을 이용하세요.</p>
-            <div class="button-row">
-              <label class="button primary file-label">
+  clearLegacyCaches().then(checkLatest);
+  window.addEventListener("pageshow", e => { if (e.persisted) checkLatest(); });
+  window.addEventListener("focus", checkLatest);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) checkLatest(); });
+})();
+</script></head>
+<body class="theme-light">
+<div class="app-shell">
+<header class="topbar master-header">
+<div class="header-main-row">
+<div class="brand-lockup">
+<img alt="메이플 키우기 연구소 대표 이미지" class="brand-avatar" src="./assets/brand/representative.png"/>
+<div><h1>MapleSpecLab</h1><p class="subtitle">메이플 키우기 연구소</p></div>
+</div>
+<nav aria-label="주요 기능" class="tabs master-tabs">
+<button class="tab active" data-tab="home" type="button">홈</button>
+<button class="tab" data-tab="stats" type="button">현재 스펙</button>
+<button class="tab" data-tab="capture" type="button">OCR</button>
+<button class="tab" data-tab="changes" type="button">장비·어빌</button>
+<button class="tab" data-tab="companions" type="button">동료</button>
+<button class="tab" data-tab="results" type="button">분석 결과</button>
+</nav>
+<div class="top-actions">
+<button class="button ghost hidden" id="installBtn" type="button">앱 설치</button>
+<label class="button ghost file-label">프로필 열기<input accept=".json,application/json" id="profileFile" type="file"/></label>
+<button class="button ghost" id="saveProfileBtn" type="button">프로필 저장</button>
+<button class="button primary" id="runCompareBtn" type="button">비교 실행</button>
+</div>
+</div>
+<nav aria-label="보조 메뉴" class="secondary-nav">
+<button class="secondary-link" data-tab="help" type="button">도움말</button>
+<button class="secondary-link" data-tab="report" type="button">오류 제보</button>
+<button class="secondary-link" data-tab="about" type="button">정보</button>
+</nav>
+</header>
+<main>
+<section class="tab-panel active" id="tab-home">
+<div class="dashboard-top-grid">
+<article class="dashboard-hero-card text-only-hero">
+<div class="dashboard-hero-copy">
+<p class="eyebrow">MAPLE SPEC LAB</p>
+<h2><span>스펙 분석부터 변경 결과까지,</span><span>한 번에.</span></h2>
+<p class="dashboard-hero-description">현재 스펙을 등록하고 장비·어빌·동료 변경 결과를 바로 비교해보세요.</p>
+<div class="button-row dashboard-hero-actions">
+<button class="button dark-primary" data-go-tab="capture" type="button">OCR 시작</button>
+<button class="button ghost" data-go-tab="stats" type="button">직접 입력</button>
+</div>
+<p class="home-project-note">개인의 호기심으로 시작한 프로젝트입니다.</p>
+</div>
+<div class="dashboard-feature-strip">
+<article><span>◎</span><div><strong>정확한 분석</strong><p>현재 스펙과 변경값을 분리해 계산합니다.</p></div></article>
+<article><span>↗</span><div><strong>최적 선택 추천</strong><p>수많은 경우 중 더 나은 선택을 찾습니다.</p></div></article>
+<article><span>⇄</span><div><strong>변경 결과 비교</strong><p>변경 전후 피해 변화를 한눈에 봅니다.</p></div></article>
+<article><span>◇</span><div><strong>데이터는 안전하게</strong><p>이미지와 입력값은 기기 안에서 처리됩니다.</p></div></article>
+</div>
+</article>
+<article class="dashboard-current-card">
+<div class="dashboard-card-heading">
+<div><h2>현재 기준</h2><p>현재 스펙과 사용 중인 동료를 관리합니다.</p></div>
+<div class="button-row compact-actions">
+<button class="button ghost" data-go-tab="capture" type="button">OCR로 불러오기</button>
+<button class="button ghost" data-go-tab="stats" type="button">직접 입력</button>
+</div>
+</div>
+<div class="dashboard-current-grid">
+<section class="dashboard-team-box">
+<div class="mini-title-row"><strong>현재 장착 동료</strong><span id="homeTeamCount">0/7</span></div>
+<div class="dashboard-team-list" id="homeCurrentCompanionTeam"><p class="dashboard-empty">현재 사용 중인 동료를 등록해 주세요.</p></div>
+</section>
+<section class="dashboard-profile-box">
+<div class="mini-title-row"><strong>프로필 정보</strong><button class="mini-link" data-go-tab="stats" type="button">수정</button></div>
+<dl><div><dt>프로필</dt><dd id="homeProfileName">현재 세션</dd></div><div><dt>저장 방식</dt><dd>직접 저장</dd></div><div><dt>기준 동료</dt><dd id="homeProfileTeamState">미등록</dd></div><div><dt>최근 수정</dt><dd id="homeProfileUpdated">현재 세션</dd></div><div><dt>저장 상태</dt><dd id="homeProfileSaveState">미저장</dd></div></dl>
+</section>
+</div>
+<div class="dashboard-baseline-alert">현재 스펙에는 등록한 동료 7명의 효과가 이미 반영된 기준값을 입력해야 합니다.</div>
+<div class="dashboard-stats-heading"><div><h3>기본 능력치</h3><p>현재 계산의 기준이 되는 핵심 수치입니다.</p></div><button class="mini-link" data-go-tab="stats" type="button">상세 입력</button></div>
+<div class="dashboard-stat-grid" id="homeStatCards"></div>
+</article>
+</div>
+<div class="dashboard-module-grid">
+<article class="dashboard-module-card dashboard-ocr-card">
+<div class="module-heading"><div><h3>OCR 결과 검토</h3><p>인식 결과를 확인하고 수정합니다.</p></div><button class="mini-link" data-go-tab="capture" type="button">전체 확인</button></div>
+<div class="dashboard-filter-row"><span>현재 스펙</span><div class="status-legend"><i class="ok"></i> 입력됨 <i class="empty"></i> 미입력</div></div>
+<div class="dashboard-ocr-preview" id="homeOcrPreview"></div>
+<button class="dashboard-card-footer" data-go-tab="capture" type="button">OCR 화면 열기 <span>›</span></button>
+</article>
+<article class="dashboard-module-card">
+<div class="module-heading"><div><h3>장비</h3><p>장비 변경 옵션을 비교합니다.</p></div><button class="mini-link" data-go-tab="changes" type="button">OCR 불러오기</button></div>
+<div class="module-tabs"><b>현재 장비</b><span>변경 옵션</span></div>
+<div class="module-list" id="homeEquipmentSummary"></div>
+<button class="dashboard-add-button" data-go-tab="changes" type="button">＋ 장비 비교 시작</button>
+</article>
+<article class="dashboard-module-card">
+<div class="module-heading"><div><h3>어빌리티</h3><p>어빌리티 변경 옵션을 비교합니다.</p></div><button class="mini-link" data-go-tab="changes" type="button">OCR 불러오기</button></div>
+<div class="module-tabs"><b>현재 어빌리티</b><span>변경 옵션</span></div>
+<div class="module-list" id="homeAbilitySummary"></div>
+<button class="dashboard-add-button" data-go-tab="changes" type="button">＋ 어빌리티 비교 시작</button>
+</article>
+<article class="dashboard-module-card dashboard-optimizer-card">
+<div class="module-heading"><div><h3>동료 조합 추천</h3><p>현재 기준 조합에서 더 나은 구성을 찾습니다.</p></div></div>
+<div class="optimizer-preview-row"><label>추천 목표<select id="homeOptimizerCategory"><option>범용</option><option>보스</option><option>일반몹</option><option>보스 + 일반몹 혼합</option><option>상태이상</option><option>명중</option></select></label><label>추천 개수<select id="homeOptimizerCount"><option>3</option><option selected="">5</option><option>10</option></select></label></div>
+<div class="optimizer-preview-priorities"><div><b>1</b><span>데미지</span><strong>40%</strong></div><div><b>2</b><span>크리티컬 데미지</span><strong>35%</strong></div><div><b>3</b><span>공격 속도</span><strong>25%</strong></div></div>
+<button class="button primary dashboard-optimize-button" data-go-tab="companions" type="button">추천 조합 계산</button>
+<p class="module-note">현재 장착 동료 7명을 기준으로 실제 변화량만 계산합니다.</p>
+</article>
+</div>
+</section>
+<section class="tab-panel" id="tab-capture">
+<div class="section-heading">
+<div>
+<p class="eyebrow">LOCAL IMAGE INPUT</p>
+<h2>이미지를 디바이스에서 가져오기</h2>
+<p>업로드된 이미지는 서버로 전송하지 않고 현재 브라우저 안에서만 처리합니다.</p>
+</div>
+<div class="status-pill" id="ocrStatus">OCR 대기</div>
+</div>
+<div class="ocr-caution">
+<strong>OCR 결과는 반드시 직접 확인해 주세요.</strong> 이미지 해상도와 화면 상태에 따라 항목이나 숫자가 잘못 인식될 수 있습니다. 현재 스펙에 적용하기 전에 모든 값을 한 번 더 확인하고 필요한 부분을 수정해 주세요.
+</div>
+<div class="capture-grid">
+<article class="panel drop-panel" id="dropZone">
+<div class="drop-icon">＋</div>
+<h3>파일·사진 추가</h3>
+<p>PC에서는 드래그앤드롭 또는 파일 선택, 모바일에서는 사진첩·파일 선택을 이용하세요.</p>
+<div class="button-row">
+<label class="button primary file-label">
                 이미지 선택
-                <input id="imageInput" type="file" accept="image/*" multiple>
-              </label>
-              <label class="button ghost file-label">
+                <input accept="image/*" id="imageInput" multiple="" type="file"/>
+</label>
+<label class="button ghost file-label">
                 카메라 촬영
-                <input id="cameraInput" type="file" accept="image/*" capture="environment">
-              </label>
-            </div>
-          </article>
-
-          <article class="panel paste-panel" id="pasteZone" tabindex="0">
-            <div class="paste-icon">⌘V</div>
-            <h3>클립보드에서 붙여넣기</h3>
-            <p>PC에서는 캡처 후 이 영역을 누르고 Ctrl+V. 모바일은 브라우저가 이미지 붙여넣기를 지원하는 경우 사용할 수 있습니다.</p>
-            <button id="clipboardBtn" class="button ghost" type="button">클립보드 이미지 읽기</button>
-            <p class="small-note">모바일 브라우저에서는 사진첩 선택 방식이 가장 안정적입니다.</p>
-          </article>
-        </div>
-
-        <div class="panel">
-          <div class="panel-title-row">
-            <div>
-              <h3>가져온 이미지</h3>
-              <p>스펙창, 장비 비교창, 어빌리티 화면을 여러 장 추가할 수 있습니다.</p>
-            </div>
-            <div class="button-row">
-              <button id="clearImagesBtn" class="button danger ghost" type="button">전체 삭제</button>
-              <button id="runOcrBtn" class="button primary" type="button">OCR 실행</button>
-            </div>
-          </div>
-          <div id="imageGallery" class="image-gallery empty">
-            <p>아직 가져온 이미지가 없습니다.</p>
-          </div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-title-row">
-            <div>
-              <h3>OCR 결과 검토</h3>
-              <p>자동 인식 결과는 적용 전에 직접 확인하고 수정할 수 있습니다.</p>
-            </div>
-            <button id="applyOcrBtn" class="button primary" type="button">현재 스펙에 적용</button>
-          </div>
-          <div id="ocrResults" class="ocr-results empty-state">OCR을 실행하면 인식 항목이 여기에 표시됩니다.</div>
-          <details class="raw-details">
-            <summary>원문 OCR 텍스트 보기</summary>
-            <textarea id="rawOcrText" rows="10" spellcheck="false"></textarea>
-          </details>
-        </div>
-      </section>
-
-      <section id="tab-stats" class="tab-panel">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">BASE PROFILE</p>
-            <h2>현재 캐릭터 스펙</h2>
-            <p>OCR 적용 후 틀린 값만 수정하거나 직접 입력할 수 있습니다.</p>
-          </div>
-          <button id="restoreSampleBtn" class="button ghost" type="button">예시 스펙 복원</button>
-        </div>
-        
-        <article class="panel current-stats-summary">
-          <div class="panel-title-row">
-            <div>
-              <p class="eyebrow">CURRENT DAMAGE</p>
-              <h3>현재 스펙 최종 피해 지수</h3>
-              <p>입력된 현재 스펙만 적용한 실시간 기준값입니다.</p>
-            </div>
-            <span class="model-badge">상대 비교 모델</span>
-          </div>
-          <div id="statsCurrentMetricCards" class="metric-grid current-metric-grid"></div>
-          <div class="stats-current-bottom">
-            <div class="current-main-score">
-              <span>대표 최종 피해 지수</span>
-              <strong id="statsCurrentMainDamage">0</strong>
-              <small>보스 대상 스킬 공격 기준</small>
-            </div>
-            <p id="statsCurrentAnalysisText" class="stats-current-analysis">
+                <input accept="image/*" capture="environment" id="cameraInput" type="file"/>
+</label>
+</div>
+</article>
+<article class="panel paste-panel" id="pasteZone" tabindex="0">
+<div class="paste-icon">⌘V</div>
+<h3>클립보드에서 붙여넣기</h3>
+<p>PC에서는 캡처 후 이 영역을 누르고 Ctrl+V. 모바일은 브라우저가 이미지 붙여넣기를 지원하는 경우 사용할 수 있습니다.</p>
+<button class="button ghost" id="clipboardBtn" type="button">클립보드 이미지 읽기</button>
+<p class="small-note">모바일 브라우저에서는 사진첩 선택 방식이 가장 안정적입니다.</p>
+</article>
+</div>
+<div class="panel">
+<div class="panel-title-row">
+<div>
+<h3>가져온 이미지</h3>
+<p>스펙창, 장비 비교창, 어빌리티 화면을 여러 장 추가할 수 있습니다.</p>
+</div>
+<div class="button-row">
+<button class="button danger ghost" id="clearImagesBtn" type="button">전체 삭제</button>
+<button class="button primary" id="runOcrBtn" type="button">OCR 실행</button>
+</div>
+</div>
+<div class="image-gallery empty" id="imageGallery">
+<p>아직 가져온 이미지가 없습니다.</p>
+</div>
+</div>
+<div class="panel">
+<div class="panel-title-row">
+<div>
+<h3>OCR 결과 검토</h3>
+<p>자동 인식 결과는 적용 전에 직접 확인하고 수정할 수 있습니다.</p>
+</div>
+<button class="button primary" id="applyOcrBtn" type="button">현재 스펙에 적용</button>
+</div>
+<div class="ocr-results empty-state" id="ocrResults">OCR을 실행하면 인식 항목이 여기에 표시됩니다.</div>
+<details class="raw-details">
+<summary>원문 OCR 텍스트 보기</summary>
+<textarea id="rawOcrText" rows="10" spellcheck="false"></textarea>
+</details>
+</div>
+</section>
+<section class="tab-panel" id="tab-stats">
+<div class="section-heading">
+<div>
+<p class="eyebrow">BASE PROFILE</p>
+<h2>현재 캐릭터 스펙</h2>
+<p>OCR 적용 후 틀린 값만 수정하거나 직접 입력할 수 있습니다.</p>
+</div>
+<button class="button danger ghost" id="restoreSampleBtn" type="button">현재 스펙 0으로 초기화</button>
+</div>
+<article class="panel current-stats-summary">
+<div class="panel-title-row">
+<div>
+<p class="eyebrow">CURRENT DAMAGE</p>
+<h3>현재 스펙 최종 피해 지수</h3>
+<p>입력된 현재 스펙만 적용한 실시간 기준값입니다.</p>
+</div>
+<span class="model-badge">상대 비교 모델</span>
+</div>
+<div class="metric-grid current-metric-grid" id="statsCurrentMetricCards"></div>
+<div class="stats-current-bottom">
+<div class="current-main-score">
+<span>대표 최종 피해 지수</span>
+<strong id="statsCurrentMainDamage">0</strong>
+<small>보스 대상 스킬 공격 기준</small>
+</div>
+<p class="stats-current-analysis" id="statsCurrentAnalysisText">
               현재 스펙을 입력하면 분석 결과가 표시됩니다.
             </p>
-          </div>
-        </article>
-
-        <div id="statsGrid" class="stats-grid"></div>
-      </section>
-
-      <section id="tab-changes" class="tab-panel">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">WHAT-IF SIMULATION</p>
-            <h2>옵션 변경 시뮬레이션</h2>
-            <p>A에서 B로 바뀌는 옵션을 입력하면 현재 스펙에 미치는 영향을 단계별로 보여줍니다.</p>
-          </div>
-          <button id="clearChangesBtn" class="button danger ghost" type="button">전체 변경 초기화</button>
-        </div>
-
-        <div class="change-source-tabs">
-          <button class="source-tab active" data-source-panel="manual" type="button">수동 입력</button>
-          <button class="source-tab" data-source-panel="equipment" type="button">장비 이미지</button>
-          <button class="source-tab" data-source-panel="ability" type="button">어빌 이미지</button>
-          <button class="source-tab" data-source-panel="companion" type="button">동료 조합</button>
-        </div>
-
-        <div id="source-panel-manual" class="source-panel active">
-          <div class="panel change-editor">
-            <label>
-              <span>출처</span>
-              <select id="changeSource">
-                <option>수동</option>
-                <option>기타</option>
-              </select>
-            </label>
-            <label>
-              <span>항목</span>
-              <select id="changeKey"></select>
-            </label>
-            <label>
-              <span>변경 전 A</span>
-              <input id="changeBefore" inputmode="decimal" type="text">
-            </label>
-            <label>
-              <span>변경 후 B</span>
-              <input id="changeAfter" inputmode="decimal" type="text">
-            </label>
-            <button id="addChangeBtn" class="button primary" type="button">변경 추가</button>
-            <button id="clearManualChangesBtn" class="button danger ghost" type="button">수동 입력 초기화</button>
-          </div>
-        </div>
-
-        <div id="source-panel-equipment" class="source-panel">
-          <article class="panel image-change-panel">
-            <div>
-              <p class="eyebrow">EQUIPMENT OCR</p>
-              <h3>장비 변경 전 / 후 이미지</h3>
-              <p>현재 장비 A와 교체할 장비 B를 각각 넣습니다. OCR 결과는 직접 수정한 뒤 변경 목록에 적용할 수 있습니다.</p>
-            </div>
-            <div class="ability-columns">
-              <div>
-                <h3>현재 장비 A</h3>
-                <div class="image-change-actions compact-actions">
-                  <label class="button ghost file-label">이미지 선택<input id="equipmentBeforeInput" type="file" accept="image/*" multiple></label>
-                  <button id="equipmentBeforeClipboardBtn" class="button ghost" type="button">클립보드</button>
-                </div>
-                <div id="equipmentBeforeGallery" class="mini-image-gallery empty-state">이미지가 없습니다.</div>
-              </div>
-              <div>
-                <h3>변경 장비 B</h3>
-                <div class="image-change-actions compact-actions">
-                  <label class="button ghost file-label">이미지 선택<input id="equipmentAfterInput" type="file" accept="image/*" multiple></label>
-                  <button id="equipmentAfterClipboardBtn" class="button ghost" type="button">클립보드</button>
-                </div>
-                <div id="equipmentAfterGallery" class="mini-image-gallery empty-state">이미지가 없습니다.</div>
-              </div>
-            </div>
-            <div class="image-change-actions">
-              <button id="startEquipmentManualBtn" class="button ghost" type="button">직접 입력 시작</button>
-              <button id="runEquipmentOcrBtn" class="button primary" type="button">장비 OCR 실행</button>
-              <button id="clearEquipmentChangesBtn" class="button danger ghost" type="button">장비 변경 초기화</button>
-            </div>
-            <div id="equipmentOcrPreview" class="ocr-change-preview empty-state">OCR 실행 후 A와 B의 인식 결과가 수정 가능한 표로 표시됩니다.</div>
-          </article>
-        </div>
-
-        <div id="source-panel-ability" class="source-panel">
-          <article class="panel image-change-panel">
-            <div>
-              <p class="eyebrow">ABILITY OCR</p>
-              <h3>어빌리티 A/B 이미지</h3>
-              <p>현재 어빌과 변경할 어빌 이미지를 각각 넣어 옵션 총합 차이를 계산합니다.</p>
-            </div>
-            <div class="ability-columns">
-              <div>
-                <h3>현재 어빌 A</h3>
-                <div class="image-change-actions compact-actions">
-                  <label class="button ghost file-label">이미지 선택<input id="abilityBeforeInput" type="file" accept="image/*" multiple></label>
-                  <button id="abilityBeforeClipboardBtn" class="button ghost" type="button">클립보드</button>
-                </div>
-                <div id="abilityBeforeGallery" class="mini-image-gallery empty-state">이미지가 없습니다.</div>
-              </div>
-              <div>
-                <h3>변경 어빌 B</h3>
-                <div class="image-change-actions compact-actions">
-                  <label class="button ghost file-label">이미지 선택<input id="abilityAfterInput" type="file" accept="image/*" multiple></label>
-                  <button id="abilityAfterClipboardBtn" class="button ghost" type="button">클립보드</button>
-                </div>
-                <div id="abilityAfterGallery" class="mini-image-gallery empty-state">이미지가 없습니다.</div>
-              </div>
-            </div>
-            <div class="image-change-actions">
-              <button id="runAbilityOcrBtn" class="button primary" type="button">어빌 최대 7줄 OCR 실행</button>
-              <button id="clearAbilityChangesBtn" class="button danger ghost" type="button">어빌 변경 초기화</button>
-            </div>
-            <div id="abilityOcrPreview" class="ocr-change-preview empty-state">OCR 실행 후 A와 B의 최대 7개 옵션이 각각 수정 가능한 형태로 표시됩니다.</div>
-          </article>
-        </div>
-
-        <div id="source-panel-companion" class="source-panel">
-          <article class="panel">
-            <h3>동료 조합에서 가져오기</h3>
-            <p>동료 DB 탭에서 선택한 조합을 변경 목록에 적용합니다.</p>
-            <div class="button-row top-gap">
-              <button id="goCompanionTabBtn" class="button ghost" type="button">동료 DB 열기</button>
-              <button id="applyCompanionsFromChangesBtn" class="button primary" type="button">선택 동료 적용</button>
-              <button id="clearCompanionChangesBtn" class="button danger ghost" type="button">동료 변경 초기화</button>
-            </div>
-          </article>
-        </div>
-
-        <article class="panel impact-flow-panel">
-          <div class="impact-step">
-            <span class="impact-number">1</span>
-            <div><strong>옵션 변화</strong><small>A → B</small></div>
-          </div>
-          <div class="impact-arrow">→</div>
-          <div class="impact-step">
-            <span class="impact-number">2</span>
-            <div><strong>현재 스펙 반영</strong><small>기준 스펙 + 변화량</small></div>
-          </div>
-          <div class="impact-arrow">→</div>
-          <div class="impact-step">
-            <span class="impact-number">3</span>
-            <div><strong>최종 피해 비교</strong><small>보스·사냥·기본·스킬</small></div>
-          </div>
-        </article>
-
-        <div class="panel table-panel">
-          <div class="panel-title-row table-title-padding">
-            <div>
-              <h3>적용 예정 변경</h3>
-              <p>현재 스펙에 반영될 실제 옵션 변화입니다.</p>
-            </div>
-            <button id="previewChangesBtn" class="button primary" type="button">현재 스펙 변화 미리보기</button>
-          </div>
-          <div class="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>출처</th>
-                  <th>항목</th>
-                  <th class="num">변경 전 A</th>
-                  <th class="num">변경 후 B</th>
-                  <th class="num">실제 변화량</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="changeTableBody"></tbody>
-            </table>
-          </div>
-          <div id="changeEmpty" class="empty-state">아직 적용된 변경이 없습니다.</div>
-        </div>
-
-        <article class="panel live-impact-panel">
-          <div class="panel-title-row">
-            <div>
-              <h3>현재 스펙에 반영될 변화</h3>
-              <p>변경 목록을 기준으로 즉시 계산한 미리보기입니다.</p>
-            </div>
-            <button id="openResultsFromChangesBtn" class="button ghost" type="button">상세 분석 보기</button>
-          </div>
-          <div id="liveImpactMetrics" class="metric-grid"></div>
-          <div class="results-grid">
-            <div class="table-scroll">
-              <table>
-                <thead><tr><th>항목</th><th class="num">현재</th><th class="num">변경 후</th><th class="num">차이</th></tr></thead>
-                <tbody id="liveImpactStatsBody"></tbody>
-              </table>
-            </div>
-            <div id="liveImpactAnalysis" class="impact-analysis-text">변경을 추가하면 영향 분석이 표시됩니다.</div>
-          </div>
-        </article>
-      </section>
-
-      <section id="tab-results" class="tab-panel">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">CURRENT & COMPARISON REPORT</p>
-            <h2>현재 상태 및 변경 전후 분석</h2>
-            <p>현재 스펙의 최종 피해 지수를 먼저 확인한 뒤 변경 전후 효율을 비교합니다.</p>
-          </div>
-          <button id="runCompareBtn2" class="button primary" type="button">다시 계산</button>
-        </div>
-
-        <article class="panel current-analysis-panel">
-          <div class="panel-title-row">
-            <div>
-              <p class="eyebrow">CURRENT STATE</p>
-              <h3>현재 스펙 최종 피해 지수</h3>
-              <p>현재 입력된 스펙만 적용한 기준값입니다.</p>
-            </div>
-            <span class="model-badge">상대 비교 모델</span>
-          </div>
-
-          <div id="currentMetricCards" class="metric-grid current-metric-grid"></div>
-
-          <div class="current-detail-grid">
-            <div class="current-main-score">
-              <span>대표 최종 피해 지수</span>
-              <strong id="currentMainDamage">0</strong>
-              <small>보스 대상 스킬 공격 기준</small>
-            </div>
-            <div class="current-analysis-text">
-              <h3>현재 상태 분석</h3>
-              <p id="currentAnalysisText">현재 스펙을 입력하면 분석 결과가 표시됩니다.</p>
-            </div>
-          </div>
-        </article>
-
-        <div class="comparison-divider"><span>변경 전후 비교</span></div>
-
-        <div id="metricCards" class="metric-grid"></div>
-
-        <div class="results-grid">
-          <article class="panel">
-            <h3>변경 후 스펙</h3>
-            <div class="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>항목</th>
-                    <th class="num">변경 전</th>
-                    <th class="num">변경 후</th>
-                    <th class="num">변화량</th>
-                  </tr>
-                </thead>
-                <tbody id="afterStatsBody"></tbody>
-              </table>
-            </div>
-          </article>
-
-          <article class="panel">
-            <h3>보스 스킬 기준 옵션 기여도</h3>
-            <div class="table-scroll">
-              <table>
-                <thead>
-                  <tr><th>옵션</th><th class="num">단독 영향</th></tr>
-                </thead>
-                <tbody id="contributionBody"></tbody>
-              </table>
-            </div>
-          </article>
-        </div>
-
-        <article class="panel analysis-panel">
-          <h3>변경 결과 자동 분석</h3>
-          <p id="analysisText">변경값을 추가하고 비교 실행을 눌러주세요.</p>
-        </article>
-      </section>
-
-      <section id="tab-companions" class="tab-panel">
-  <div class="section-heading">
-    <div><p class="eyebrow">COMPANION INVENTORY & OPTIMIZER</p><h2>보유 동료 관리 및 7인 조합 추천</h2>
-    <p>메인 1명과 서브 6명은 장착 효과 계산상 동일하게 보고 총 7개 조합을 추천합니다.</p></div>
-    <div class="button-row">
-      <button id="saveCurrentCompanionTeamBtn" class="button primary" type="button">현재 7인 조합 저장</button>
-      <button id="resetCompanionInventoryBtn" class="button danger ghost" type="button">보유 동료 전체 초기화</button>
-      <button id="saveCompanionInventoryBtn" class="button ghost" type="button">보유 목록 저장</button>
-      <label class="button ghost file-label">보유 목록 열기<input id="companionInventoryFile" type="file" accept=".json,application/json"></label>
-    </div>
-  </div>
-
-  <article class="panel companion-import-panel">
-    <div class="panel-title-row"><div><p class="eyebrow">SCREENSHOT IMPORT</p><h3>등급별 동료 목록 스크린샷 등록</h3>
-    <p>에픽·유니크·레전드 목록 이미지를 넣으면 보유 여부와 레벨 후보를 추출합니다.</p></div>
-    <button id="runCompanionInventoryOcrBtn" class="button primary" type="button">보유 동료 OCR</button></div>
-    <div class="companion-import-grid">
-      <div class="companion-import-box"><span class="rarity-badge epic">에픽</span><div class="image-change-actions compact-actions"><label class="button ghost file-label">에픽 이미지<input id="epicInventoryInput" type="file" accept="image/*"></label><button id="epicInventoryClipboardBtn" class="button ghost" type="button">클립보드</button></div><div id="epicInventoryPreview" class="inventory-preview empty-state">이미지 없음</div></div>
-      <div class="companion-import-box"><span class="rarity-badge unique">유니크</span><div class="image-change-actions compact-actions"><label class="button ghost file-label">유니크 이미지<input id="uniqueInventoryInput" type="file" accept="image/*"></label><button id="uniqueInventoryClipboardBtn" class="button ghost" type="button">클립보드</button></div><div id="uniqueInventoryPreview" class="inventory-preview empty-state">이미지 없음</div></div>
-      <div class="companion-import-box"><span class="rarity-badge legendary">레전드</span><div class="image-change-actions compact-actions"><label class="button ghost file-label">레전드 이미지<input id="legendaryInventoryInput" type="file" accept="image/*"></label><button id="legendaryInventoryClipboardBtn" class="button ghost" type="button">클립보드</button></div><div id="legendaryInventoryPreview" class="inventory-preview empty-state">이미지 없음</div></div>
-    </div>
-    <div id="companionInventoryOcrResult" class="ocr-change-preview empty-state">OCR 결과가 여기에 표시됩니다.</div>
-  </article>
-
-  <div class="companion-summary-grid">
-    <article class="metric-card"><span>보유 동료</span><strong id="ownedCompanionCount">0개</strong></article>
-    <article class="metric-card"><span>현재 장착</span><strong id="equippedCompanionCount">0 / 7</strong></article>
-    <article class="metric-card"><span>필수 고정</span><strong id="fixedCompanionCount">0 / 7</strong></article>
-  </div>
-
-  <div class="panel companion-controls">
-    <label><span>등급 보기</span><select id="companionRarityFilter"><option value="all">전체</option><option value="legendary">레전드</option><option value="unique">유니크</option><option value="epic">에픽</option></select></label>
-    <label><span>상태 보기</span><select id="companionStateFilter"><option value="all">전체</option><option value="owned">보유만</option><option value="equipped">현재 장착</option><option value="fixed">필수 고정</option><option value="excluded">제외</option></select></label>
-    <label><span>정렬</span><select id="companionSortMode"><option value="rarity">등급별</option><option value="job">직업별</option></select></label>
-    <label><span>검색</span><input id="companionSearch" type="search" placeholder="동료 또는 효과 검색"></label>
-  </div>
-  <div id="companionCards" class="companion-grid"></div>
-
-  <article class="panel optimizer-panel">
-    <div class="panel-title-row"><div><p class="eyebrow">7-SLOT OPTIMIZER</p><h3>보유 동료 조합 추천</h3>
-    <p>필수 고정 N개를 유지하고 나머지 빈자리를 자동으로 채웁니다.</p></div>
-    <button id="runCompanionOptimizerBtn" class="button primary" type="button">추천 조합 계산</button></div>
-    <div class="optimizer-settings">
-      <label><span>추천 기준</span><select id="optimizerMode"><option value="boss_skill">보스 스킬</option><option value="normal_skill">일반몹 스킬</option><option value="boss_basic">보스 기본공격</option><option value="normal_basic">일반몹 기본공격</option><option value="balanced">범용</option></select></label>
-      <label><span>보스 가중치</span><input id="bossWeight" type="number" min="0" max="100" value="50"></label>
-      <label><span>추천 개수</span><input id="optimizerResultCount" type="number" min="1" max="10" value="5"></label>
-    </div>
-    <div id="optimizerStatus" class="status-line">보유 동료를 등록한 뒤 추천 조합 계산을 눌러주세요.</div>
-    <div id="optimizerResults" class="optimizer-results"></div>
-  </article>
-
-  <details class="panel companion-db-details">
-    <summary>동료 데이터베이스 원문 확인</summary>
-    <textarea id="companionEditor" class="code-editor" spellcheck="false"></textarea>
-    <div class="button-row companion-db-actions"><label class="button ghost file-label">DB 불러오기<input id="companionFile" type="file" accept=".json,application/json"></label><button id="saveCompanionBtn" class="button ghost" type="button">DB 저장</button></div>
-  </details>
+</div>
+</article>
+<article class="panel current-team-summary">
+<div class="panel-title-row"><div><p class="eyebrow">CURRENT BASELINE</p><h3>현재 사용 중인 동료</h3><p>현재 스펙에 이미 반영된 7명입니다. 추천 시 이 조합과의 차이만 계산합니다.</p></div><button class="button ghost" data-go-tab="companions" type="button">동료 수정</button></div>
+<div class="stats-current-team empty-state" id="statsCurrentCompanionTeam">현재 사용 중인 동료를 등록하지 않았습니다.</div>
+</article><article class="inline-help-card">
+<strong>입력 방법</strong>
+<p>이미지 OCR을 사용하지 않아도 아래 모든 항목을 직접 입력할 수 있습니다. OCR을 사용한 경우에도 인식된 값을 자유롭게 수정할 수 있습니다.</p>
+</article>
+<div class="stats-groups" id="statsGrid"></div>
 </section>
+<section class="tab-panel" id="tab-changes">
+<div class="section-heading">
+<div>
+<p class="eyebrow">WHAT-IF SIMULATION</p>
+<h2>옵션 변경 시뮬레이션</h2>
+<p>A에서 B로 바뀌는 옵션을 입력하면 현재 스펙에 미치는 영향을 단계별로 보여줍니다.</p>
+</div>
+<button class="button danger ghost" id="clearChangesBtn" type="button">전체 변경 초기화</button>
+</div>
+<div class="change-source-tabs">
+<button class="source-tab active" data-source-panel="manual" type="button">수동 입력</button>
+<button class="source-tab" data-source-panel="equipment" type="button">장비 이미지</button>
+<button class="source-tab" data-source-panel="ability" type="button">어빌 이미지</button>
+<button class="source-tab" data-source-panel="companion" type="button">동료 조합</button>
+</div>
+<div class="source-panel active" id="source-panel-manual">
+<div class="panel change-editor">
+<label>
+<span>출처</span>
+<select id="changeSource">
+<option>수동</option>
+<option>기타</option>
+</select>
+</label>
+<label>
+<span>항목</span>
+<select id="changeKey"></select>
+</label>
+<label>
+<span>변경 전 A</span>
+<input id="changeBefore" inputmode="decimal" type="text"/>
+</label>
+<label>
+<span>변경 후 B</span>
+<input id="changeAfter" inputmode="decimal" type="text"/>
+</label>
+<button class="button primary" id="addChangeBtn" type="button">변경 추가</button>
+<button class="button danger ghost" id="clearManualChangesBtn" type="button">수동 입력 초기화</button>
+</div>
+</div>
+<div class="source-panel" id="source-panel-equipment">
+<article class="panel image-change-panel">
+<div>
+<p class="eyebrow">EQUIPMENT OCR</p>
+<h3>장비 변경 전 / 후 이미지</h3>
+<p>현재 장비 A와 교체할 장비 B를 각각 넣습니다. OCR 결과는 직접 수정한 뒤 변경 목록에 적용할 수 있습니다.</p>
+</div>
+<div class="ability-columns">
+<div class="image-drop-target" data-drop-label="현재 장비 A" id="equipmentBeforeDrop">
+<h3>현재 장비 A</h3>
+<div class="image-change-actions compact-actions">
+<label class="button ghost file-label">이미지 선택<input accept="image/*" id="equipmentBeforeInput" multiple="" type="file"/></label>
+<button class="button ghost" id="equipmentBeforeClipboardBtn" type="button">클립보드</button>
+</div>
+<div class="mini-image-gallery empty-state" id="equipmentBeforeGallery">이미지가 없습니다.</div>
+</div>
+<div class="image-drop-target" data-drop-label="변경 장비 B" id="equipmentAfterDrop">
+<h3>변경 장비 B</h3>
+<div class="image-change-actions compact-actions">
+<label class="button ghost file-label">이미지 선택<input accept="image/*" id="equipmentAfterInput" multiple="" type="file"/></label>
+<button class="button ghost" id="equipmentAfterClipboardBtn" type="button">클립보드</button>
+</div>
+<div class="mini-image-gallery empty-state" id="equipmentAfterGallery">이미지가 없습니다.</div>
+</div>
+</div>
+<div class="image-change-actions">
+<button class="button ghost" id="startEquipmentManualBtn" type="button">직접 입력 시작</button>
+<button class="button primary" id="runEquipmentOcrBtn" type="button">장비 OCR 실행</button>
+<button class="button danger ghost" id="clearEquipmentChangesBtn" type="button">장비 변경 초기화</button>
+</div>
+<div class="ocr-change-preview empty-state" id="equipmentOcrPreview">OCR 실행 후 A와 B의 인식 결과가 수정 가능한 표로 표시됩니다.</div>
+</article>
+</div>
+<div class="source-panel" id="source-panel-ability">
+<article class="panel image-change-panel">
+<div>
+<p class="eyebrow">ABILITY OCR</p>
+<h3>어빌리티 A/B 이미지</h3>
+<p>현재 어빌과 변경할 어빌 이미지를 각각 넣어 옵션 총합 차이를 계산합니다.</p>
+</div>
+<div class="ability-columns">
+<div class="image-drop-target" data-drop-label="현재 어빌 A" id="abilityBeforeDrop">
+<h3>현재 어빌 A</h3>
+<div class="image-change-actions compact-actions">
+<label class="button ghost file-label">이미지 선택<input accept="image/*" id="abilityBeforeInput" multiple="" type="file"/></label>
+<button class="button ghost" id="abilityBeforeClipboardBtn" type="button">클립보드</button>
+</div>
+<div class="mini-image-gallery empty-state" id="abilityBeforeGallery">이미지가 없습니다.</div>
+</div>
+<div class="image-drop-target" data-drop-label="변경 어빌 B" id="abilityAfterDrop">
+<h3>변경 어빌 B</h3>
+<div class="image-change-actions compact-actions">
+<label class="button ghost file-label">이미지 선택<input accept="image/*" id="abilityAfterInput" multiple="" type="file"/></label>
+<button class="button ghost" id="abilityAfterClipboardBtn" type="button">클립보드</button>
+</div>
+<div class="mini-image-gallery empty-state" id="abilityAfterGallery">이미지가 없습니다.</div>
+</div>
+</div>
+<div class="image-change-actions">
+<button class="button ghost" id="startAbilityManualBtn" type="button">직접 입력 시작</button>
+<button class="button primary" id="runAbilityOcrBtn" type="button">어빌 최대 7줄 OCR 실행</button>
+<button class="button danger ghost" id="clearAbilityChangesBtn" type="button">어빌 변경 초기화</button>
+</div>
+<div class="ocr-change-preview empty-state" id="abilityOcrPreview">OCR 실행 후 A와 B의 최대 7개 옵션이 각각 수정 가능한 형태로 표시됩니다.</div>
+</article>
+</div>
+<div class="source-panel" id="source-panel-companion">
+<article class="panel">
+<h3>동료 조합에서 가져오기</h3>
+<p>동료 DB 탭에서 선택한 조합을 변경 목록에 적용합니다.</p>
+<div class="button-row top-gap">
+<button class="button ghost" id="goCompanionTabBtn" type="button">동료 DB 열기</button>
+<button class="button primary" id="applyCompanionsFromChangesBtn" type="button">선택 동료 적용</button>
+<button class="button danger ghost" id="clearCompanionChangesBtn" type="button">동료 변경 초기화</button>
+</div>
+</article>
+</div>
+<article class="panel impact-flow-panel">
+<div class="impact-step">
+<span class="impact-number">1</span>
+<div><strong>옵션 변화</strong><small>A → B</small></div>
+</div>
+<div class="impact-arrow">→</div>
+<div class="impact-step">
+<span class="impact-number">2</span>
+<div><strong>현재 스펙 반영</strong><small>기준 스펙 + 변화량</small></div>
+</div>
+<div class="impact-arrow">→</div>
+<div class="impact-step">
+<span class="impact-number">3</span>
+<div><strong>최종 피해 비교</strong><small>보스·사냥·기본·스킬</small></div>
+</div>
+</article>
+<div class="panel table-panel">
+<div class="panel-title-row table-title-padding">
+<div>
+<h3>적용 예정 변경</h3>
+<p>현재 스펙에 반영될 실제 옵션 변화입니다.</p>
+</div>
+<button class="button primary" id="previewChangesBtn" type="button">현재 스펙 변화 미리보기</button>
+</div>
+<div class="table-scroll">
+<table>
+<thead>
+<tr>
+<th>출처</th>
+<th>항목</th>
+<th class="num">변경 전 A</th>
+<th class="num">변경 후 B</th>
+<th class="num">실제 변화량</th>
+<th></th>
+</tr>
+</thead>
+<tbody id="changeTableBody"></tbody>
+</table>
+</div>
+<div class="empty-state" id="changeEmpty">아직 적용된 변경이 없습니다.</div>
+</div>
+<article class="panel live-impact-panel">
+<div class="panel-title-row">
+<div>
+<h3>현재 스펙에 반영될 변화</h3>
+<p>변경 목록을 기준으로 즉시 계산한 미리보기입니다.</p>
+</div>
+<button class="button ghost" id="openResultsFromChangesBtn" type="button">상세 분석 보기</button>
+</div>
+<div class="metric-grid" id="liveImpactMetrics"></div>
+<div class="results-grid">
+<div class="table-scroll">
+<table>
+<thead><tr><th>항목</th><th class="num">현재</th><th class="num">변경 후</th><th class="num">차이</th></tr></thead>
+<tbody id="liveImpactStatsBody"></tbody>
+</table>
+</div>
+<div class="impact-analysis-text" id="liveImpactAnalysis">변경을 추가하면 영향 분석이 표시됩니다.</div>
+</div>
+</article>
+</section>
+<section class="tab-panel" id="tab-results">
+<div class="section-heading">
+<div>
+<p class="eyebrow">CURRENT &amp; COMPARISON REPORT</p>
+<h2>현재 상태 및 변경 전후 분석</h2>
+<p>현재 스펙의 최종 피해 지수를 먼저 확인한 뒤 변경 전후 효율을 비교합니다.</p>
+</div>
+<button class="button primary" id="runCompareBtn2" type="button">다시 계산</button>
+</div>
+<article class="panel current-analysis-panel">
+<div class="panel-title-row">
+<div>
+<p class="eyebrow">CURRENT STATE</p>
+<h3>현재 스펙 최종 피해 지수</h3>
+<p>현재 입력된 스펙만 적용한 기준값입니다.</p>
+</div>
+<span class="model-badge">상대 비교 모델</span>
+</div>
+<div class="metric-grid current-metric-grid" id="currentMetricCards"></div>
+<div class="current-detail-grid">
+<div class="current-main-score">
+<span>대표 최종 피해 지수</span>
+<strong id="currentMainDamage">0</strong>
+<small>보스 대상 스킬 공격 기준</small>
+</div>
+<div class="current-analysis-text">
+<h3>현재 상태 분석</h3>
+<p id="currentAnalysisText">현재 스펙을 입력하면 분석 결과가 표시됩니다.</p>
+</div>
+</div>
+</article>
+<div class="comparison-divider"><span>변경 전후 비교</span></div>
+<div class="metric-grid" id="metricCards"></div>
+<div class="results-grid">
+<article class="panel">
+<h3>변경 후 스펙</h3>
+<div class="table-scroll">
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th class="num">변경 전</th>
+<th class="num">변경 후</th>
+<th class="num">변화량</th>
+</tr>
+</thead>
+<tbody id="afterStatsBody"></tbody>
+</table>
+</div>
+</article>
+<article class="panel">
+<h3>보스 스킬 기준 옵션 기여도</h3>
+<div class="table-scroll">
+<table>
+<thead>
+<tr><th>옵션</th><th class="num">단독 영향</th></tr>
+</thead>
+<tbody id="contributionBody"></tbody>
+</table>
+</div>
+</article>
+</div>
+<article class="panel analysis-panel">
+<h3>변경 결과 자동 분석</h3>
+<p id="analysisText">변경값을 추가하고 비교 실행을 눌러주세요.</p>
+</article>
+</section>
+<section class="tab-panel" id="tab-companions">
+<div class="section-heading">
+<div><p class="eyebrow">COMPANION INVENTORY &amp; OPTIMIZER</p><h2>보유 동료 관리 및 7인 조합 추천</h2>
+<p>메인 1명과 서브 6명은 장착 효과 계산상 동일하게 보고 총 7개 조합을 추천합니다.</p></div>
+<div class="button-row">
+<button class="button primary" id="saveCurrentCompanionTeamBtn" type="button">현재 7인 조합 저장</button>
+<button class="button danger ghost" id="resetCompanionInventoryBtn" type="button">보유 동료 전체 초기화</button>
+<button class="button ghost" id="saveCompanionInventoryBtn" type="button">보유 목록 저장</button>
+<label class="button ghost file-label">보유 목록 열기<input accept=".json,application/json" id="companionInventoryFile" type="file"/></label>
+</div>
+</div>
+<article class="panel companion-import-panel">
+<div class="panel-title-row"><div><p class="eyebrow">SCREENSHOT IMPORT</p><h3>등급별 동료 목록 스크린샷 등록</h3>
+<p>에픽·유니크·레전드 목록 이미지를 넣으면 보유 여부와 레벨 후보를 추출합니다.</p></div>
+<button class="button primary" id="runCompanionInventoryOcrBtn" type="button">보유 동료 OCR</button></div>
+<div class="companion-import-grid">
 
-      <section id="tab-help" class="tab-panel">
-        <div class="section-heading"><div><p class="eyebrow">USER GUIDE</p><h2>연구소 사용 가이드</h2><p>처음 사용하는 사람도 순서대로 따라 할 수 있도록 전체 흐름과 메뉴별 사용법을 정리했습니다.</p></div></div>
-        <div class="guide-grid">
-          <article class="panel"><h3>1. 현재 스펙 등록</h3><p>스탯창 이미지를 올려 OCR을 실행하거나, 현재 스펙 메뉴에서 모든 값을 직접 입력하세요. OCR 결과는 적용 전에 반드시 검토할 수 있습니다.</p></article>
-          <article class="panel"><h3>2. 장비 비교</h3><p>현재 장비 A와 변경 장비 B를 각각 입력합니다. 1~3번은 주옵션, 4~7번은 부옵션이며 실제 반영값은 B − A입니다.</p></article>
-          <article class="panel"><h3>3. 어빌 비교</h3><p>A와 B를 각각 최대 7줄로 입력합니다. 미개방 슬롯이나 없는 옵션은 ‘(없음)’으로 두면 합산에서 제외됩니다.</p></article>
-          <article class="panel"><h3>4. 동료 추천</h3><p>현재 장착 7명은 이미 현재 스펙에 포함된 기준입니다. 추천 조합과 현재 조합의 차이만 최종 스펙에 반영됩니다.</p></article>
-          <article class="panel"><h3>5. 결과 확인</h3><p>현재 스펙 → 변화량 → 적용 후 스펙 → 피해 변화 순서로 확인하세요. 계산 근거와 능력치별 기여도도 함께 표시됩니다.</p></article>
-          <article class="panel"><h3>6. 데이터 보관</h3><p>데이터는 브라우저에 자동 저장됩니다. 다른 기기로 옮기거나 초기화에 대비하려면 프로필 저장으로 JSON 백업을 만들어 주세요.</p></article>
-        </div>
-      </section>
 
-      <section id="tab-report" class="tab-panel">
-        <div class="section-heading"><div><p class="eyebrow">BUG REPORT</p><h2>오류 및 의견 제보</h2><p>제보 내용은 GitHub Issue 작성 화면으로 전달되며, 전송 전에 내용을 직접 확인할 수 있습니다.</p></div></div>
-        <article class="notice-card privacy-notice"><strong>🔒 개인정보를 자동 수집하지 않습니다</strong><p>이름, 이메일, 전화번호, IP 주소, 위치, 로그인 정보, 방문 기록, 게임 계정 정보는 수집하지 않습니다. 사용자가 직접 작성한 설명과 선택한 연구소 데이터만 제보에 포함됩니다.</p></article>
-        <article class="panel report-form">
-          <label><span>제보 종류</span><select id="reportType"><option>OCR 인식 오류</option><option>계산 결과 오류</option><option>화면/UI 오류</option><option>기능 제안</option><option>기타</option></select></label>
-          <label><span>제목</span><input id="reportTitle" type="text" maxlength="100" placeholder="예: 장비 부옵션 7번이 인식되지 않습니다"></label>
-          <label><span>자세한 설명</span><textarea id="reportDescription" rows="8" placeholder="발생한 메뉴, 재현 순서, 실제 결과와 예상 결과를 자세히 적어 주세요."></textarea></label>
-          <label class="check-row"><input id="includeDebugData" type="checkbox" checked><span>현재 연구소 입력값과 환경 정보 포함</span></label>
-          <details><summary>포함되는 정보 확인</summary><p>연구소 버전, 브라우저 종류, 화면 크기, 현재 스펙, 변경 목록, 동료 설정이 포함될 수 있습니다. 원본 이미지와 개인정보는 자동으로 포함되지 않습니다.</p></details>
-          <div class="button-row"><button id="previewReportBtn" class="button ghost" type="button">전송 내용 미리보기</button><button id="openGithubIssueBtn" class="button primary" type="button">GitHub Issue 작성하기</button></div>
-          <textarea id="reportPreview" rows="14" spellcheck="false" readonly placeholder="미리보기를 누르면 전송될 내용이 표시됩니다."></textarea>
-          <p class="small-note">스크린샷은 GitHub Issue 화면이 열린 뒤 직접 첨부합니다. 채팅, 알림, 계정명 등 개인정보가 보이지 않는지 확인해 주세요.</p>
-        </article>
-      </section>
-    </main>
 
-    <footer>
-      <span>브라우저 로컬 저장소에 자동 저장</span>
-      <span>·</span>
-      <span>이미지는 서버로 전송하지 않음</span>
-      <span>·</span>
-      <span>v1.0 개발 미리보기</span>
-    </footer>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-  <script src="./app.js"></script>
+<div class="companion-import-box image-drop-target" data-drop-label="레전드 동료 목록" id="legendaryInventoryDrop"><span class="rarity-badge legendary">레전드</span><div class="image-change-actions compact-actions"><label class="button ghost file-label">레전드 이미지<input accept="image/*" id="legendaryInventoryInput" type="file"/></label><button class="button ghost" id="legendaryInventoryClipboardBtn" type="button">클립보드</button></div><div class="inventory-preview empty-state" id="legendaryInventoryPreview">이미지 없음</div></div><div class="companion-import-box image-drop-target" data-drop-label="유니크 동료 목록" id="uniqueInventoryDrop"><span class="rarity-badge unique">유니크</span><div class="image-change-actions compact-actions"><label class="button ghost file-label">유니크 이미지<input accept="image/*" id="uniqueInventoryInput" type="file"/></label><button class="button ghost" id="uniqueInventoryClipboardBtn" type="button">클립보드</button></div><div class="inventory-preview empty-state" id="uniqueInventoryPreview">이미지 없음</div></div><div class="companion-import-box image-drop-target" data-drop-label="에픽 동료 목록" id="epicInventoryDrop"><span class="rarity-badge epic">에픽</span><div class="image-change-actions compact-actions"><label class="button ghost file-label">에픽 이미지<input accept="image/*" id="epicInventoryInput" type="file"/></label><button class="button ghost" id="epicInventoryClipboardBtn" type="button">클립보드</button></div><div class="inventory-preview empty-state" id="epicInventoryPreview">이미지 없음</div></div></div>
+<div class="ocr-change-preview empty-state" id="companionInventoryOcrResult">OCR 결과가 여기에 표시됩니다.</div>
+</article>
+<div class="companion-summary-grid">
+<article class="metric-card"><span>보유 동료</span><strong id="ownedCompanionCount">0개</strong></article>
+<article class="metric-card"><span>현재 장착</span><strong id="equippedCompanionCount">0 / 7</strong></article>
+<article class="metric-card"><span>필수 고정</span><strong id="fixedCompanionCount">0 / 7</strong></article>
+</div>
+<article class="panel companion-baseline-panel">
+<div class="panel-title-row">
+<div><p class="eyebrow">CURRENT EQUIPPED BASELINE</p><h3>현재 사용 중인 동료 7명</h3>
+<p>현재 스펙에 이미 포함된 비교 기준입니다. 동료를 선택해도 능력치가 다시 더해지지 않으며, 추천 조합과의 차이만 계산합니다.</p></div>
+<button class="button primary" id="saveCurrentCompanionTeamBtn2" type="button">현재 7명 기준 저장</button>
+</div>
+<div class="companion-current-team-list" id="currentCompanionTeamView"></div>
+</article>
+<div class="panel companion-controls">
+<label><span>등급 보기</span><select id="companionRarityFilter"><option value="all">전체</option><option value="legendary">레전드</option><option value="unique">유니크</option><option value="epic">에픽</option></select></label>
+<label><span>상태 보기</span><select id="companionStateFilter"><option value="all">전체</option><option value="owned">보유만</option><option value="equipped">현재 장착</option><option value="fixed">필수 고정</option><option value="excluded">제외</option></select></label>
+<label><span>정렬</span><select id="companionSortMode"><option value="rarity">등급별</option><option value="job">직업별</option></select></label>
+<label><span>검색</span><input id="companionSearch" placeholder="동료 또는 효과 검색" type="search"/></label>
+</div>
+<div class="companion-grid" id="companionCards"></div>
+<article class="panel optimizer-panel">
+<div class="panel-title-row"><div><p class="eyebrow">7-SLOT OPTIMIZER</p><h3>동료 조합 추천</h3>
+<p>현재 사용 중인 7명을 기준으로, 필수 고정 동료를 유지하면서 더 나은 조합을 찾습니다.</p></div>
+</div>
+<div class="optimizer-settings optimizer-settings-v2">
+<label><span>추천 카테고리</span><select id="optimizerMode">
+<option value="general">범용</option><option value="boss">보스</option><option value="normal">일반몹</option>
+<option value="mixed">보스 + 일반몹 혼합</option><option value="status">상태이상</option><option value="accuracy">명중</option>
+</select></label>
+<label><span>추천 개수</span><input id="optimizerResultCount" max="10" min="1" type="number" value="5"/></label>
+</div>
+<div class="priority-builder">
+<div class="priority-heading"><div><h4>세부 우선순위 가중치</h4><p>원하는 능력치를 최대 3개까지 선택하고 합계 100%로 설정하세요. 카테고리를 바꾸면 권장값이 자동 입력됩니다.</p></div><button class="button ghost" id="normalizePriorityBtn" type="button">합계 100% 맞추기</button></div>
+<div class="priority-grid">
+<label><span>우선순위 1</span><select id="priorityKey1"></select><input id="priorityWeight1" max="100" min="0" type="number" value="60"/></label>
+<label><span>우선순위 2</span><select id="priorityKey2"></select><input id="priorityWeight2" max="100" min="0" type="number" value="25"/></label>
+<label><span>우선순위 3</span><select id="priorityKey3"></select><input id="priorityWeight3" max="100" min="0" type="number" value="15"/></label>
+</div>
+<div class="status-line" id="priorityWeightStatus">가중치 합계 100%</div>
+</div>
+<div class="optimizer-action"><button class="button primary optimizer-run" id="runCompanionOptimizerBtn" type="button">추천 조합 계산</button><p>현재 기준 7명과 추천 조합의 차이만 변경 목록에 반영됩니다.</p></div><div class="status-line" id="optimizerStatus">보유 동료를 등록한 뒤 추천 조합 계산을 눌러주세요.</div>
+<div class="optimizer-results" id="optimizerResults"></div>
+</article>
+<details class="panel companion-db-details">
+<summary>동료 데이터베이스 원문 확인</summary>
+<textarea class="code-editor" id="companionEditor" spellcheck="false"></textarea>
+<div class="button-row companion-db-actions"><label class="button ghost file-label">DB 불러오기<input accept=".json,application/json" id="companionFile" type="file"/></label><button class="button ghost" id="saveCompanionBtn" type="button">DB 저장</button></div>
+</details>
+</section>
+<section class="tab-panel" id="tab-help">
+<div class="section-heading guide-heading"><div><p class="eyebrow">USER GUIDE</p><h2>처음이라면 여기부터 시작하세요</h2><p>연구소의 전체 흐름을 순서대로 따라가면 현재 스펙 등록부터 결과 분석까지 완료할 수 있습니다.</p></div></div>
+<div class="guide-grid">
+<article class="panel guide-card"><div class="guide-step">STEP 1</div><h3>현재 스펙 등록</h3><div class="guide-rule"></div><p>스탯창 이미지를 올려 OCR을 실행하거나 현재 스펙 메뉴에서 직접 입력합니다. OCR 결과는 적용 전에 반드시 검토하고 수정할 수 있습니다.</p><button class="button ghost" data-go-tab="stats" type="button">현재 스펙으로 이동</button></article>
+<article class="panel guide-card"><div class="guide-step">STEP 2</div><h3>장비 비교</h3><div class="guide-rule"></div><p>현재 장비 A와 변경 장비 B를 입력합니다. 1-3번은 주옵션, 4-7번은 부옵션이며 실제 변화량은 B에서 A를 뺀 값입니다.</p><button class="button ghost" data-go-tab="changes" type="button">장비 비교로 이동</button></article>
+<article class="panel guide-card"><div class="guide-step">STEP 3</div><h3>어빌리티 비교</h3><div class="guide-rule"></div><p>A와 B를 각각 최대 7줄로 입력합니다. 열리지 않았거나 존재하지 않는 슬롯은 (없음)으로 두면 계산에서 제외됩니다.</p><button class="button ghost" data-go-tab="changes" type="button">어빌 비교로 이동</button></article>
+<article class="panel guide-card"><div class="guide-step">STEP 4</div><h3>동료 등록 및 추천</h3><div class="guide-rule"></div><p>현재 장착 7명은 현재 스펙에 이미 반영된 기준입니다. 추천 조합과 현재 조합의 차이만 최종 스펙에 반영됩니다.</p><button class="button ghost" data-go-tab="companions" type="button">동료 메뉴로 이동</button></article>
+<article class="panel guide-card"><div class="guide-step">STEP 5</div><h3>결과 확인</h3><div class="guide-rule"></div><p>현재 스펙, 변화량, 적용 후 스펙, 피해 변화 순서로 확인합니다. 결과 화면에서는 주요 증가와 감소 원인도 함께 확인할 수 있습니다.</p><button class="button ghost" data-go-tab="results" type="button">분석 결과로 이동</button></article>
+<article class="panel guide-card"><div class="guide-step">STEP 6</div><h3>데이터 보관</h3><div class="guide-rule"></div><p>입력값은 자동으로 복원되지 않습니다. 다시 사용할 데이터는 상단의 프로필 저장으로 JSON 백업을 만든 뒤 직접 불러오세요.</p></article>
+</div>
+<article class="notice-card source-notice guide-source"><strong>계산식 출처</strong><p>스펙 및 피해량 계산식은 <a href="https://kimprincess-calculator.netlify.app/" rel="noopener noreferrer" target="_blank">최종뎀 계산기 Beta 2.0</a>을 토대로 제작되었습니다.</p></article>
+</section>
+<section class="tab-panel" id="tab-report">
+<div class="section-heading report-heading"><div><p class="eyebrow">BUG REPORT</p><h2>오류 및 의견 제보</h2><p>아래 내용을 작성하면 MapleSpecLab GitHub Issue 작성 화면이 열립니다. 전송 전 미리보기에서 포함 내용을 확인할 수 있습니다.</p></div></div>
+<article class="notice-card privacy-notice"><strong>개인정보를 자동으로 수집하지 않습니다</strong><p>이름, 이메일, 전화번호, IP 주소, 위치, 로그인 정보, 방문 기록, 게임 계정 정보는 수집하지 않습니다. 원본 이미지도 자동으로 전송되지 않습니다.</p></article>
+<article class="panel report-form report-steps">
+<section class="report-step"><div class="report-step-label">STEP 1</div><h3>제보 종류를 선택하세요</h3><select id="reportType"><option>화면/UI 오류</option><option>버튼·기능 오류</option><option>저장·불러오기 오류</option><option>입력값 반영 오류</option><option>드래그 앤 드롭 오류</option><option>모바일 화면 오류</option><option>기능 제안</option><option>기타</option></select></section>
+<section class="report-step"><div class="report-step-label">STEP 2</div><h3>문제를 한 줄로 요약하세요</h3><input id="reportTitle" maxlength="100" placeholder="예: 장비 부옵션 7번이 인식되지 않습니다" type="text"/></section>
+<section class="report-step"><div class="report-step-label">STEP 3</div><h3>문제가 발생한 상황을 설명하세요</h3><textarea id="reportDescription" placeholder="어느 메뉴에서 어떤 작업을 했을 때 문제가 발생했는지 적어 주세요." rows="6"></textarea><textarea id="reportSteps" placeholder="재현 순서 예시
+1. 장비 비교 메뉴 열기
+2. 변경 장비 이미지 추가
+3. OCR 실행" rows="5"></textarea></section>
+<section class="report-step report-two-column"><div><div class="report-step-label">STEP 4</div><h3>실제 결과</h3><textarea id="reportActual" placeholder="실제로 나타난 결과" rows="4"></textarea></div><div><div class="report-step-label">STEP 5</div><h3>예상 결과</h3><textarea id="reportExpected" placeholder="정상이라면 기대한 결과" rows="4"></textarea></div></section>
+<section class="report-step"><div class="report-step-label">STEP 6</div><h3>전송할 연구소 정보를 확인하세요</h3><label class="check-row"><input checked="" id="includeDebugData" type="checkbox"/><span>현재 연구소 입력값과 실행 환경 정보를 포함합니다</span></label><details><summary>포함되는 정보와 포함되지 않는 정보 보기</summary><p><b>포함 가능:</b> 연구소 버전, 브라우저 종류, 화면 크기, 현재 스펙, 변경 목록, 동료 설정</p><p><b>자동 포함 안 됨:</b> 원본 이미지, 이름, 이메일, 전화번호, IP 주소, 위치, 로그인 정보, 게임 계정 정보</p></details></section>
+<section class="report-step"><div class="report-step-label">STEP 7</div><h3>전송 내용을 미리 확인하세요</h3><div class="button-row"><button class="button ghost" id="previewReportBtn" type="button">전송 내용 미리보기</button><button class="button primary" id="openGithubIssueBtn" type="button">GitHub Issue 열기</button></div><textarea id="reportPreview" placeholder="미리보기를 누르면 GitHub에 전달될 내용이 표시됩니다." readonly="" rows="14" spellcheck="false"></textarea><p class="small-note">스크린샷은 GitHub Issue 화면이 열린 뒤 직접 첨부합니다. 채팅, 알림, 계정명 등 개인정보가 보이지 않는지 먼저 확인해 주세요.</p></section>
+</article>
+<article class="notice-card thanks-notice"><strong>제보해 주셔서 감사합니다</strong><p>보내주신 내용은 오류를 재현하고 연구소를 개선하는 데 큰 도움이 됩니다.</p></article>
+</section>
+<section class="tab-panel" id="tab-about">
+<div class="section-heading">
+<div>
+<p class="eyebrow">ABOUT MAPLE SPEC LAB</p>
+<h2>연구소 정보</h2>
+<p>프로젝트의 성격, 계산식 출처, 버전 및 개인정보 처리 원칙을 확인할 수 있습니다.</p>
+</div>
+</div>
+<div class="about-grid">
+<article class="panel about-card">
+<h3>프로젝트 안내</h3>
+<p><strong>이 연구소는 개인의 호기심으로 시작한 개인 프로젝트입니다.</strong></p>
+<p>개인의 사정이나 변덕에 따라 연구소가 삭제되거나 추가 업데이트가 중단될 수 있습니다.</p>
+</article>
+<article class="panel about-card">
+<h3>계산식 출처</h3>
+<p>스펙 및 피해량 계산식은 <a href="https://kimprincess-calculator.netlify.app/" rel="noopener noreferrer" target="_blank">최종뎀 계산기 Beta 2.0</a>을 토대로 제작되었습니다.</p>
+<p>일부 기능과 계산 방식은 MapleSpecLab의 목적에 맞게 수정·확장되었습니다. 게임 업데이트, 숨겨진 내부 공식, 반올림 방식 등의 차이로 실제 게임 결과와 다를 수 있으며, 계산 결과는 비교와 참고를 위한 값으로 정확한 게임 내부 결과를 보장하지 않습니다. 원 계산기와 MapleSpecLab은 별개의 프로젝트입니다.</p>
+</article>
+<article class="panel about-card">
+<h3>개인정보 처리</h3>
+<p>연구소는 이름, 이메일, 전화번호, IP 주소, 위치, 로그인 정보, 게임 계정 정보 등을 자동 수집하지 않습니다.</p>
+<p>오류 제보 시에는 사용자가 직접 작성하거나 선택한 정보만 GitHub Issue 작성 화면으로 전달됩니다.</p>
+</article>
+<article class="panel about-card">
+<h3>버전 정보</h3>
+<dl class="version-list">
+<div><dt>연구소 버전</dt><dd>v1.0.0-dev.7</dd></div>
+<div><dt>계산식 기준</dt><dd>Beta 2.0 기반</dd></div>
+<div><dt>동료 DB</dt><dd>Companion DB v1</dd></div>
+<div><dt>배포 단계</dt><dd>개발 테스트</dd></div>
+</dl>
+</article>
+</div>
+</section>
+</main>
+<footer><span>이미지는 서버로 전송하지 않음</span><span>·</span><span>프로필은 직접 저장·불러오기</span><span>·</span><span>v1.0.0-dev.10</span><span>·</span><a href="https://kimprincess-calculator.netlify.app/" rel="noopener noreferrer" target="_blank">계산식 출처: 최종뎀 계산기 Beta 2.0</a><span>· DEV BUILD 2026.07.24</span></footer>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script src="./app.js?v=1.0.0-dev.10"></script>
 </body>
 </html>
