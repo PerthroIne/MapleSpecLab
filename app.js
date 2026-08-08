@@ -1,5 +1,5 @@
-const APP_VERSION = "1.1.0";
-const BUILD_TIME = "2026-08-08 15:30";
+const APP_VERSION = "1.1.1";
+const BUILD_TIME = "2026-08-08 17:00";
 const STORAGE_KEY = "mapleSpecLabV10Dev5";
 const GITHUB_REPOSITORY = "PerthroIne/MapleSpecLab";
 
@@ -62,7 +62,8 @@ let state = {
   abilityBeforeImages: [],
   abilityAfterImages: [],
   companionInventory: {},
-  companionInventoryImages: {epic:null, unique:null, legendary:null},
+  companionInventoryImages: {epic:[], unique:[], legendary:[]},
+  pendingCompanionDetections: [],
   optimizerResults: [],
   pendingOcrDiffs: {},
   pendingAbilityRows: {before: [], after: []},
@@ -316,16 +317,16 @@ function renderStatsCurrentCompanionTeam(){
   const box = document.querySelector("#statsCurrentCompanionTeam");
   if(!box) return;
   const team = getBaselineCompanionTeam();
-  if(team.length !== 7){
+  if(!team.length){
     box.className = "stats-current-team empty-state";
-    box.textContent = "현재 사용 중인 동료를 정확히 7명 등록하면 여기에 표시됩니다.";
+    box.textContent = "현재 사용 중인 동료가 등록되지 않았습니다.";
     return;
   }
   box.className = "stats-current-team";
   box.innerHTML = team.map((x, index) => `
     <div class="stats-team-chip">
       <img src="${x.companion.icon_data || x.companion.icon}" alt="${x.companion.name}">
-      <span><b>${index===0?"메인":"서브"}</b>${x.companion.name}<small>${x.companion.rarities[x.rarity].name} · Lv.${x.level}</small></span>
+      <span><b>장착 ${index+1}</b>${x.companion.name}<small>${x.companion.rarities[x.rarity].name} · Lv.${x.level}</small></span>
     </div>`).join("");
 }
 function renderChangeSelect() {
@@ -1144,7 +1145,7 @@ function setupAllDropZones(){
   setupFileDropZone("#abilityBeforeDrop",files=>{state.abilityBeforeImages=createLocalImageEntries(files);renderMiniGallery("#abilityBeforeGallery",state.abilityBeforeImages)});
   setupFileDropZone("#abilityAfterDrop",files=>{state.abilityAfterImages=createLocalImageEntries(files);renderMiniGallery("#abilityAfterGallery",state.abilityAfterImages)});
   for(const rarity of ["epic","unique","legendary"]){
-    setupFileDropZone(`#${rarity}InventoryDrop`,files=>setInventoryImage(rarity,files[0]));
+    setupFileDropZone(`#${rarity}InventoryDrop`,files=>addInventoryImages(rarity,files));
   }
 }
 
@@ -1241,8 +1242,8 @@ function getBaselineCompanionTeam(){
 function renderCurrentCompanionTeam(){
   const box=$("#currentCompanionTeamView"); if(!box)return;
   const team=getBaselineCompanionTeam();
-  if(team.length!==7){box.innerHTML='<div class="empty-state">아래 목록에서 현재 장착 동료를 정확히 7명 선택한 뒤 기준 저장을 눌러주세요.</div>';renderStatsCurrentCompanionTeam();return}
-  box.innerHTML=team.map((x,i)=>`<div class="companion-current-member"><span>${i===0?"메인":"서브"}</span><img src="${x.companion.icon_data||x.companion.icon}" alt="${x.companion.name}"><strong>${x.companion.name}</strong><small>${x.companion.rarities[x.rarity].name} Lv.${x.level}</small></div>`).join("");
+  if(!team.length){box.innerHTML='<div class="empty-state">이미지의 E 표시를 분석하거나 아래 목록에서 현재 장착 동료를 선택해 주세요.</div>';renderStatsCurrentCompanionTeam();return}
+  box.innerHTML=team.map((x,i)=>`<div class="companion-current-member"><span>장착 ${i+1}</span><img src="${x.companion.icon_data||x.companion.icon}" alt="${x.companion.name}"><strong>${x.companion.name}</strong><small>${x.companion.rarities[x.rarity].name} Lv.${x.level}</small></div>`).join("")+`${team.length<7?`<div class="empty-state compact-empty">E 표시 ${team.length}명만 반영되었습니다.</div>`:""}`;
   renderStatsCurrentCompanionTeam();
   renderHomeDashboard();
 }
@@ -1376,58 +1377,117 @@ function renderOptimizerResults(){
   state.optimizerResults.forEach((r,i)=>{const deltas=current.length===7?companionDeltaSums(current,r.team):{},deltaRows=Object.entries(deltas).filter(([,v])=>v!==0).map(([k,v])=>`${STAT_META[k]?.[0]||k} ${v>=0?"+":""}${formatValue(k,v)}`).join(" · ");const card=document.createElement("article");card.className="optimizer-result-card";card.innerHTML=`<div class="optimizer-result-head"><div><strong>${i+1}위 추천 조합</strong><p class="subtitle">현재 사용 7명 대비 교체 결과</p></div><div class="optimizer-score">${currentScore===null?"기준 미저장":`${r.score-currentScore>=0?"+":""}${(r.score-currentScore).toFixed(3)}`}</div></div><div class="optimizer-team">${r.team.map(x=>`<div class="optimizer-member"><img src="${x.companion.icon_data||x.companion.icon}" alt="${x.companion.name}"><strong>${x.companion.name}</strong><small>${x.companion.rarities[x.rarity].name} Lv.${x.level}</small></div>`).join("")}</div><div class="optimizer-deltas">${deltaRows||"현재 조합과 능력치 차이가 없습니다."}</div><div class="button-row top-gap"><button class="button primary" data-use-recommended="${i}" type="button">이 추천을 변경 목록에 적용</button></div>`;box.appendChild(card)});
   $$('[data-use-recommended]').forEach(btn=>btn.addEventListener('click',()=>applyRecommendedTeamToChanges(state.optimizerResults[Number(btn.dataset.useRecommended)].team)))
 }
-function setInventoryImage(rarity,file){if(!file)return;const old=state.companionInventoryImages[rarity];if(old?.url)URL.revokeObjectURL(old.url);state.companionInventoryImages[rarity]={file,url:URL.createObjectURL(file)};$(`#${rarity}InventoryPreview`).className="inventory-preview";$(`#${rarity}InventoryPreview`).innerHTML=`<img src="${state.companionInventoryImages[rarity].url}" alt="${rarity} 목록">`}
+function renderInventoryImageGallery(rarity){
+  const box=$(`#${rarity}InventoryPreview`),items=state.companionInventoryImages[rarity]||[];
+  if(!items.length){box.className="inventory-preview empty-state";box.textContent="이미지 없음";return}
+  box.className="inventory-preview inventory-multi-gallery";
+  box.innerHTML=items.map((item,index)=>`<article><img src="${item.url}" alt="${rarity} 목록 ${index+1}"><button data-remove-inventory-image="${rarity}:${item.id}" type="button" aria-label="이미지 삭제">×</button><small>${index+1}번 이미지</small></article>`).join("");
+  $$('[data-remove-inventory-image]').forEach(button=>button.addEventListener("click",()=>{
+    const [targetRarity,id]=button.dataset.removeInventoryImage.split(":");
+    const target=state.companionInventoryImages[targetRarity]||[],item=target.find(x=>x.id===id);if(item?.url)URL.revokeObjectURL(item.url);
+    state.companionInventoryImages[targetRarity]=target.filter(x=>x.id!==id);renderInventoryImageGallery(targetRarity)
+  }))
+}
+function addInventoryImages(rarity,files){
+  const additions=[...(files||[])].filter(file=>file.type.startsWith("image/")).map(file=>({id:crypto.randomUUID(),file,url:URL.createObjectURL(file)}));
+  state.companionInventoryImages[rarity]=[...(state.companionInventoryImages[rarity]||[]),...additions];renderInventoryImageGallery(rarity)
+}
 async function setInventoryFromClipboard(rarity){
-  try{const entries=await readClipboardImageEntries();if(!entries.length)throw new Error("클립보드에 이미지가 없습니다.");setInventoryImage(rarity,entries[0].file)}catch(e){alert(e.message)}
+  try{const entries=await readClipboardImageEntries();if(!entries.length)throw new Error("클립보드에 이미지가 없습니다.");addInventoryImages(rarity,entries.map(x=>x.file))}catch(e){alert(e.message)}
 }
-async function preprocessInventoryImage(file){
-  const bitmap=await createImageBitmap(file);
-  const scale=3,canvas=document.createElement("canvas");
-  canvas.width=bitmap.width*scale;canvas.height=bitmap.height*scale;
-  const ctx=canvas.getContext("2d");ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
-  const img=ctx.getImageData(0,0,canvas.width,canvas.height),d=img.data;
-  for(let i=0;i<d.length;i+=4){
-    const gray=d[i]*.299+d[i+1]*.587+d[i+2]*.114;
-    const v=gray>135?255:0;d[i]=d[i+1]=d[i+2]=v
-  }
-  ctx.putImageData(img,0,0);
-  return new Promise(resolve=>canvas.toBlob(resolve,"image/png"))
+
+function rgbToHsv(r,g,b){
+  r/=255;g/=255;b/=255;const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;let h=0;
+  if(d){if(max===r)h=60*(((g-b)/d)%6);else if(max===g)h=60*((b-r)/d+2);else h=60*((r-g)/d+4)}
+  if(h<0)h+=360;return [h,max?d/max:0,max]
 }
-async function runInventoryOcr(){
-  if(!window.Tesseract)return alert("OCR 라이브러리를 불러오지 못했습니다.");
-  const all=[];
-  for(const rarity of ["legendary","unique","epic"]){
-    const item=state.companionInventoryImages[rarity];if(!item)continue;
-    $("#companionInventoryOcrResult").textContent=`${rarity} 레벨 영역 확대 OCR 처리 중...`;
-    const processed=await preprocessInventoryImage(item.file);
-    const result=await Tesseract.recognize(processed,"eng",{
-      tessedit_char_whitelist:"Lv.0123456789",
-      preserve_interword_spaces:"1"
-    });
-    const text=result.data.text.replace(/[|Il]/g,"1");
-    let levels=[...text.matchAll(/(?:Lv\.?\s*)?(\d{1,3})/gi)].map(m=>Number(m[1]));
-    const cap=state.companionDb.companions[0].rarities[rarity].level_cap;
-    levels=levels.filter(v=>v>=1&&v<=cap);
-    const words=(result.data.words||[])
-      .filter(w=>/^\d{1,3}$/.test(w.text)&&Number(w.text)>=1&&Number(w.text)<=cap)
-      .sort((a,b)=>(a.bbox.y0-b.bbox.y0)||a.bbox.x0-b.bbox.x0).map(w=>Number(w.text));
-    if(words.length>levels.length)levels=words;
-    state.companionDb.companions.forEach((c,i)=>{
-      const inv=ensureInventoryEntry(c.id,rarity);
-      if(Number.isFinite(levels[i])){inv.owned=true;inv.level=Math.min(levels[i],c.rarities[rarity].level_cap);all.push({name:c.name,rarity,level:inv.level,ok:true})}
-      else all.push({name:c.name,rarity,level:inv.level,ok:false})
-    })
+function rarityHueMatch(rarity,h,s,v){
+  if(s<.28||v<.18)return false;
+  if(rarity==="legendary")return h>=75&&h<=175;
+  if(rarity==="unique")return h>=25&&h<=72;
+  return h>=245&&h<=335
+}
+async function inventoryCanvas(file){
+  const bitmap=await createImageBitmap(file),scale=Math.min(1,1200/bitmap.width),canvas=document.createElement("canvas");
+  canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext("2d").drawImage(bitmap,0,0,canvas.width,canvas.height);return canvas
+}
+function detectCompanionFrames(canvas,rarity){
+  const ctx=canvas.getContext("2d"),image=ctx.getImageData(0,0,canvas.width,canvas.height),data=image.data,w=canvas.width,h=canvas.height,n=w*h,mask=new Uint8Array(n);
+  for(let i=0;i<n;i++){const p=i*4,[hh,s,v]=rgbToHsv(data[p],data[p+1],data[p+2]);if(rarityHueMatch(rarity,hh,s,v))mask[i]=1}
+  const components=[],neighbors=[-1,1,-w,w,-w-1,-w+1,w-1,w+1];
+  for(let start=0;start<n;start++){
+    if(mask[start]!==1)continue;const stack=[start],members=[];mask[start]=2;let minX=w,maxX=0,minY=h,maxY=0;
+    while(stack.length){const idx=stack.pop(),x=idx%w,y=Math.floor(idx/w);members.push(idx);minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+      for(const delta of neighbors){const next=idx+delta;if(next<0||next>=n||mask[next]!==1)continue;const nx=next%w,ny=Math.floor(next/w);if(Math.abs(nx-x)>1||Math.abs(ny-y)>1)continue;mask[next]=2;stack.push(next)}}
+    const bw=maxX-minX+1,bh=maxY-minY+1,aspect=bw/bh;if(members.length<24||bw<24||bh<24||bw>260||bh>260||aspect<.68||aspect>1.32)continue;
+    const band=Math.max(2,Math.round(Math.min(bw,bh)*.14));let borderPixels=0,strength=0;
+    for(const idx of members){const x=idx%w,y=Math.floor(idx/w);if(x-minX<=band||maxX-x<=band||y-minY<=band||maxY-y<=band){const p=idx*4,[,s,v]=rgbToHsv(data[p],data[p+1],data[p+2]);borderPixels++;strength+=s*v}}
+    const perimeter=Math.max(1,2*bw*band+2*Math.max(0,bh-2*band)*band),coverage=borderPixels/perimeter;if(coverage<.055)continue;
+    components.push({x:minX,y:minY,width:bw,height:bh,borderStrength:borderPixels?strength/borderPixels:0,score:coverage*(1-Math.abs(1-aspect))})
   }
-  $("#companionInventoryOcrResult").className="ocr-change-preview";
-  $("#companionInventoryOcrResult").innerHTML=all.length?`<div class="ocr-diff-grid">${all.map(x=>`<div class="ocr-diff-row ${x.ok?"":"ocr-confidence-low"}"><span>${x.name} · ${state.companionDb.companions[0].rarities[x.rarity].name}</span><strong>${x.ok?`Lv.${x.level}`:"확인 필요"}</strong></div>`).join("")}</div><p class="small-note top-gap">확인 필요 항목은 아래 카드에서 보유 여부와 레벨을 수동 수정하세요.</p>`:"등록된 등급 이미지가 없습니다.";
-  renderCompanions();saveLocal()
+  components.sort((a,b)=>b.score-a.score);const kept=[];
+  for(const box of components){const overlaps=kept.some(other=>{const ix=Math.max(0,Math.min(box.x+box.width,other.x+other.width)-Math.max(box.x,other.x)),iy=Math.max(0,Math.min(box.y+box.height,other.y+other.height)-Math.max(box.y,other.y));return ix*iy/Math.min(box.width*box.height,other.width*other.height)>.45});if(!overlaps)kept.push(box)}
+  return kept.sort((a,b)=>a.y-b.y||a.x-b.x)
+}
+function descriptorFromCanvas(source,box=null){
+  const size=20,canvas=document.createElement("canvas");canvas.width=size;canvas.height=size;const ctx=canvas.getContext("2d");ctx.fillStyle="#777";ctx.fillRect(0,0,size,size);
+  if(box){const inset=.09;ctx.drawImage(source,box.x+box.width*inset,box.y+box.height*inset,box.width*(1-inset*2),box.height*(1-inset*2),0,0,size,size)}else ctx.drawImage(source,0,0,size,size);
+  const d=ctx.getImageData(0,0,size,size).data,gray=[];for(let i=0;i<d.length;i+=4)gray.push(d[i]*.299+d[i+1]*.587+d[i+2]*.114);
+  const bits=[];for(let y=1;y<size-1;y++)for(let x=1;x<size-1;x++){const i=y*size+x;bits.push(gray[i+1]>gray[i-1],gray[i+size]>gray[i-size])}return bits
+}
+function descriptorSimilarity(a,b){let same=0,n=Math.min(a.length,b.length);for(let i=0;i<n;i++)if(a[i]===b[i])same++;return n?same/n:0}
+let companionReferenceDescriptors=null;
+async function getCompanionReferenceDescriptors(){
+  if(companionReferenceDescriptors)return companionReferenceDescriptors;companionReferenceDescriptors=[];
+  for(const companion of state.companionDb.companions){try{const response=await fetch(companion.icon_data||companion.icon),bitmap=await createImageBitmap(await response.blob());companionReferenceDescriptors.push({id:companion.id,bits:descriptorFromCanvas(bitmap)})}catch{}}
+  return companionReferenceDescriptors
+}
+function cropDataUrl(canvas,box){const out=document.createElement("canvas"),pad=.03;out.width=96;out.height=96;out.getContext("2d").drawImage(canvas,box.x-box.width*pad,box.y-box.height*pad,box.width*(1+pad*2),box.height*(1+pad*2),0,0,96,96);return out.toDataURL("image/jpeg",.84)}
+function wordsForFrame(words,box){return (words||[]).filter(word=>{const x=((word.bbox?.x0||0)+(word.bbox?.x1||0))/2,y=((word.bbox?.y0||0)+(word.bbox?.y1||0))/2;return x>=box.x&&x<=box.x+box.width&&y>=box.y&&y<=box.y+box.height}).sort((a,b)=>(a.bbox?.y0||0)-(b.bbox?.y0||0)||(a.bbox?.x0||0)-(b.bbox?.x0||0)).map(word=>word.text).join(" ")}
+function detectEquippedMarker(canvas,box){
+  const ctx=canvas.getContext("2d"),x=Math.max(0,Math.round(box.x+box.width*.58)),y=Math.max(0,Math.round(box.y+box.height*.18)),w=Math.max(1,Math.round(box.width*.34)),h=Math.max(1,Math.round(box.height*.62)),data=ctx.getImageData(x,y,Math.min(w,canvas.width-x),Math.min(h,canvas.height-y)).data;let bright=0,total=0;
+  for(let i=0;i<data.length;i+=4){const [hue,s,v]=rgbToHsv(data[i],data[i+1],data[i+2]);if(hue>=42&&hue<=82&&s>=.52&&v>=.62)bright++;total++}
+  return total>0&&bright/total>=.018
+}
+function renderCompanionDetectionReview(){
+  const box=$("#companionInventoryOcrResult"),items=state.pendingCompanionDetections||[],options=state.companionDb.companions.map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
+  if(!items.length){box.className="ocr-change-preview empty-state";box.textContent="색 테두리의 동료 카드를 찾지 못했습니다. 이미지가 잘리지 않았는지 확인하거나 아래 목록에서 직접 입력해 주세요.";return}
+  box.className="ocr-change-preview companion-detection-review";
+  box.innerHTML=`<div class="import-safety-notice"><strong>적용 전 검토</strong><p>위치가 아닌 테두리 색과 초상화로 찾은 후보입니다. 이름·보유 여부·레벨·E 장착 표시를 확인한 항목만 적용하세요.</p></div>
+    <div class="detection-review-list">${items.map((item,index)=>`<article class="detection-review-row ${item.matchConfidence<.58?"low-confidence":""}"><img src="${item.thumbnail}" alt="감지 카드 ${index+1}"><div class="detection-fields"><label><span>동료</span><select data-detection-companion="${item.id}"><option value="">선택 필요</option>${options}</select></label><label><span>보유 판정</span><select data-detection-owned="${item.id}"><option value="unknown">확인 필요</option><option value="owned">보유</option><option value="unowned">미보유</option></select></label><label><span>레벨</span><input data-detection-level="${item.id}" type="number" inputmode="numeric" min="1" max="${item.cap}" value="${item.level}"></label><label class="equipped-detection"><input data-detection-equipped="${item.id}" type="checkbox" ${item.equipped?"checked":""}><span>현재 장착 E</span></label></div><small>초상화 일치도 ${Math.round(item.matchConfidence*100)}% · 테두리 ${Math.round(item.borderStrength*100)}%</small></article>`).join("")}</div>
+    <div class="button-row top-gap"><button class="button primary" id="applyCompanionDetectionsBtn" type="button">검토한 보유·장착 동료 적용</button><button class="button ghost" id="manualCompanionEntryBtn" type="button">목록에서 직접 입력</button></div>`;
+  for(const item of items){const select=box.querySelector(`[data-detection-companion="${item.id}"]`),owned=box.querySelector(`[data-detection-owned="${item.id}"]`);if(item.companionId&&item.matchConfidence>=.58)select.value=item.companionId;owned.value=item.ownedGuess;select.addEventListener("change",()=>item.companionId=select.value);owned.addEventListener("change",()=>item.ownedGuess=owned.value);box.querySelector(`[data-detection-level="${item.id}"]`).addEventListener("change",event=>{item.level=Math.max(1,Math.min(item.cap,Number(event.target.value||1)));event.target.value=item.level});box.querySelector(`[data-detection-equipped="${item.id}"]`).addEventListener("change",event=>item.equipped=event.target.checked)}
+  $("#applyCompanionDetectionsBtn").addEventListener("click",applyCompanionDetections);$("#manualCompanionEntryBtn").addEventListener("click",openCompanionManualEntry)
+}
+function applyCompanionDetections(){
+  for(const item of state.pendingCompanionDetections||[]){const companion=$("#companionInventoryOcrResult")?.querySelector(`[data-detection-companion="${item.id}"]`),owned=$("#companionInventoryOcrResult")?.querySelector(`[data-detection-owned="${item.id}"]`),level=$("#companionInventoryOcrResult")?.querySelector(`[data-detection-level="${item.id}"]`),equipped=$("#companionInventoryOcrResult")?.querySelector(`[data-detection-equipped="${item.id}"]`);if(companion)item.companionId=companion.value;if(owned)item.ownedGuess=owned.value;if(level)item.level=Math.max(1,Math.min(item.cap,Number(level.value||1)));if(equipped)item.equipped=equipped.checked}
+  const reviewed=(state.pendingCompanionDetections||[]).filter(item=>item.companionId&&item.ownedGuess!=="unknown");if(!reviewed.length)return alert("동료 이름과 보유 여부를 확인한 항목이 없습니다.");
+  const merged=new Map();for(const item of reviewed){const key=`${item.companionId}::${item.rarity}`,previous=merged.get(key);if(!previous||item.matchConfidence>previous.matchConfidence)merged.set(key,item)}
+  const unique=[...merged.values()],equipped=unique.filter(item=>item.ownedGuess==="owned"&&item.equipped);
+  for(const item of unique){const inv=ensureInventoryEntry(item.companionId,item.rarity);inv.owned=item.ownedGuess==="owned";inv.level=Math.max(1,Math.min(item.cap,item.level));if(!inv.owned){inv.equipped=false;inv.fixed=false;inv.excluded=false}}
+  if(equipped.length>=1&&equipped.length<=7){for(const inv of Object.values(state.companionInventory))inv.equipped=false;for(const item of equipped)ensureInventoryEntry(item.companionId,item.rarity).equipped=true;state.savedCompanionTeam=equipped.map(item=>inventoryKey(item.companionId,item.rarity))}
+  state.pendingCompanionDetections=[];renderCompanions();renderCurrentCompanionTeam();saveLocal();const result=$("#companionInventoryOcrResult");result.className="ocr-change-preview import-applied";result.innerHTML=`<strong>${unique.length}개 동료를 적용했습니다.</strong><p>${equipped.length>=1&&equipped.length<=7?`E 표시 ${equipped.length}명을 현재 사용 중인 동료로 반영했습니다.`:"보유 여부와 레벨을 반영했습니다."}</p>`
+}
+async function analyzeCompanionInventoryImages(){
+  const registered=[];for(const rarity of ["legendary","unique","epic"])for(const item of state.companionInventoryImages[rarity]||[])registered.push({rarity,item});if(!registered.length)return alert("동료 이미지를 하나 이상 추가해 주세요.");
+  const button=$("#runCompanionInventoryOcrBtn");button.disabled=true;state.pendingCompanionDetections=[];
+  try{const refs=await getCompanionReferenceDescriptors();for(let imageIndex=0;imageIndex<registered.length;imageIndex++){const {rarity,item}=registered[imageIndex],canvas=await inventoryCanvas(item.file),frames=detectCompanionFrames(canvas,rarity);$("#companionInventoryOcrResult").className="ocr-change-preview";$("#companionInventoryOcrResult").textContent=`${registered.length}장 중 ${imageIndex+1}장 · 색 테두리와 초상화 분석 중...`;
+      let words=[];if(window.Tesseract&&frames.length){const blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/png"));const result=await Tesseract.recognize(blob,"eng",{tessedit_char_whitelist:"Lv.E0123456789",preserve_interword_spaces:"1"});words=result.data.words||[]}
+      const cap=state.companionDb.companions[0].rarities[rarity].level_cap;for(const frame of frames){const bits=descriptorFromCanvas(canvas,frame),matches=refs.map(ref=>({id:ref.id,score:descriptorSimilarity(bits,ref.bits)})).sort((a,b)=>b.score-a.score),cardText=wordsForFrame(words,frame),levelMatch=cardText.match(/Lv[.\s:·-]*(\d{1,3})/i),equipped=/(^|\s)E($|\s)/.test(cardText)||detectEquippedMarker(canvas,frame);state.pendingCompanionDetections.push({id:crypto.randomUUID(),rarity,thumbnail:cropDataUrl(canvas,frame),companionId:matches[0]?.id||"",matchConfidence:matches[0]?.score||0,borderStrength:frame.borderStrength,ownedGuess:frame.borderStrength>=.42?"owned":frame.borderStrength<=.24?"unowned":"unknown",level:Math.max(1,Math.min(cap,Number(levelMatch?.[1]||1))),cap,equipped})}}
+    renderCompanionDetectionReview()
+  }catch(error){console.error(error);alert("이미지 분석 중 오류가 발생했습니다. 아래 목록에서 직접 입력해 주세요.");openCompanionManualEntry()}finally{button.disabled=false}
+}
+function openCompanionManualEntry(){
+  $("#companionManualNotice")?.classList.add("active");
+  $("#companionCards")?.scrollIntoView({behavior:"smooth",block:"start"});
+  $("#companionSearch")?.focus({preventScroll:true});
 }
 
 function applyCompanionsToChanges(){const team=selectedCompanions();if(team.length!==7)return alert("추천 또는 변경할 동료 조합을 정확히 7명 선택하세요.");applyRecommendedTeamToChanges(team)}
 function setupCompanionActions(){
-  $("#companionSearch").addEventListener("input",renderCompanions);$("#companionRarityFilter").addEventListener("change",renderCompanions);$("#companionStateFilter").addEventListener("change",renderCompanions);$("#companionSortMode").addEventListener("change",renderCompanions);$("#runCompanionOptimizerBtn").addEventListener("click",optimizeCompanions);$("#runCompanionInventoryOcrBtn").addEventListener("click",runInventoryOcr);
+  $("#companionSearch").addEventListener("input",renderCompanions);$("#companionRarityFilter").addEventListener("change",renderCompanions);$("#companionStateFilter").addEventListener("change",renderCompanions);$("#companionSortMode").addEventListener("change",renderCompanions);$("#runCompanionOptimizerBtn").addEventListener("click",optimizeCompanions);$("#runCompanionInventoryOcrBtn").addEventListener("click",analyzeCompanionInventoryImages);
   const priorityOptions='<option value="">선택 안 함</option>'+Object.entries(STAT_META).map(([k,m])=>`<option value="${k}">${m[0]}</option>`).join("");[1,2,3].forEach(i=>{$(`#priorityKey${i}`).innerHTML=priorityOptions;$(`#priorityWeight${i}`).addEventListener("input",updatePriorityStatus)});$("#optimizerMode").addEventListener("change",e=>applyOptimizerPreset(e.target.value));$("#normalizePriorityBtn").addEventListener("click",normalizePriorityWeights);applyOptimizerPreset($("#optimizerMode").value);
-  $("#epicInventoryInput").addEventListener("change",e=>setInventoryImage("epic",e.target.files[0]));$("#uniqueInventoryInput").addEventListener("change",e=>setInventoryImage("unique",e.target.files[0]));$("#legendaryInventoryInput").addEventListener("change",e=>setInventoryImage("legendary",e.target.files[0]));
+  $("#epicInventoryInput").addEventListener("change",e=>{addInventoryImages("epic",e.target.files);e.target.value=""});$("#uniqueInventoryInput").addEventListener("change",e=>{addInventoryImages("unique",e.target.files);e.target.value=""});$("#legendaryInventoryInput").addEventListener("change",e=>{addInventoryImages("legendary",e.target.files);e.target.value=""});
   $("#epicInventoryClipboardBtn").addEventListener("click",()=>setInventoryFromClipboard("epic"));$("#uniqueInventoryClipboardBtn").addEventListener("click",()=>setInventoryFromClipboard("unique"));$("#legendaryInventoryClipboardBtn").addEventListener("click",()=>setInventoryFromClipboard("legendary"));
   const saveCurrentTeam=()=>{const team=inventoryEntries(true).filter(x=>x.equipped);if(team.length!==7)return alert("현재 장착 동료를 정확히 7명 선택하세요.");state.savedCompanionTeam=team.map(x=>x.key);saveLocal();renderCurrentCompanionTeam();$("#optimizerStatus").textContent="현재 7인 조합을 비교 기준으로 저장했습니다.";};
   $("#saveCurrentCompanionTeamBtn").addEventListener("click",saveCurrentTeam);
@@ -1435,8 +1495,8 @@ function setupCompanionActions(){
   $("#resetCompanionInventoryBtn").addEventListener("click",()=>{
     if(!confirm("보유 상태, 레벨, 현재 장착, 필수 고정, 추천 제외를 모두 초기화할까요?"))return;
     state.companionInventory={};state.savedCompanionTeam=[];state.optimizerResults=[];
-    for(const rarity of ["epic","unique","legendary"]){const old=state.companionInventoryImages[rarity];if(old?.url)URL.revokeObjectURL(old.url);state.companionInventoryImages[rarity]=null;$(`#${rarity}InventoryPreview`).className="inventory-preview empty-state";$(`#${rarity}InventoryPreview`).textContent="이미지 없음"}
-    $("#companionInventoryOcrResult").className="ocr-change-preview empty-state";$("#companionInventoryOcrResult").textContent="OCR 결과가 여기에 표시됩니다.";
+    for(const rarity of ["epic","unique","legendary"]){for(const item of state.companionInventoryImages[rarity]||[])if(item.url)URL.revokeObjectURL(item.url);state.companionInventoryImages[rarity]=[];renderInventoryImageGallery(rarity)}
+    state.pendingCompanionDetections=[];$("#companionInventoryOcrResult").className="ocr-change-preview empty-state";$("#companionInventoryOcrResult").textContent="이미지를 추가한 뒤 분석하면 검토할 카드 후보가 표시됩니다.";
     $("#optimizerResults").innerHTML="";$("#optimizerStatus").textContent="보유 동료를 등록한 뒤 추천 조합 계산을 눌러주세요.";
     renderCompanions();saveLocal()
   });
