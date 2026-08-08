@@ -1,5 +1,5 @@
-const APP_VERSION = "1.1.1";
-const BUILD_TIME = "2026-08-08 17:00";
+const APP_VERSION = "1.1.2";
+const BUILD_TIME = "2026-08-08 19:30";
 const STORAGE_KEY = "mapleSpecLabV10Dev5";
 const GITHUB_REPOSITORY = "PerthroIne/MapleSpecLab";
 
@@ -52,6 +52,7 @@ let state = {
   stats: structuredClone(DEFAULT_STATS),
   images: [],
   ocr: {},
+  ocrReview: {},
   changes: [],
   deferredInstallPrompt: null,
   companionDb: null,
@@ -564,16 +565,31 @@ function renderOcrResults() {
   box.innerHTML = Object.entries(STAT_META).map(([key, meta]) => {
     const recognized = Object.prototype.hasOwnProperty.call(state.ocr, key);
     const value = recognized ? state.ocr[key] : 0;
-    return `<div class="ocr-item ${recognized ? "" : "ocr-confidence-low"}">
+    const review = recognized ? (state.ocrReview[key] || "warning") : "missing";
+    const statusLabel = review === "confirmed" ? "확인 완료" : review === "warning" ? "확인 필요" : "미인식";
+    return `<div class="ocr-item review-${review}" data-ocr-item="${key}">
       <label>
-        <span class="stat-label-row"><span>${meta[0]} <small class="ocr-status-badge ${recognized ? 'recognized' : 'missing'}">${recognized ? '인식됨' : '미인식'}</small></span>${officialHelpButton(key)}</span>
+        <span class="stat-label-row"><span>${meta[0]} <small class="ocr-status-badge ${review}">${statusLabel}</small></span>${officialHelpButton(key)}</span>
         <input data-ocr-key="${key}" inputmode="decimal" value="${value}">
+        ${review === "warning" ? `<button class="ocr-confirm-button" data-confirm-ocr="${key}" type="button">이 값 확인 완료</button>` : ""}
       </label>
     </div>`;
   }).join("");
   $$("[data-ocr-key]").forEach(input => {
-    input.addEventListener("change", () => state.ocr[input.dataset.ocrKey] = parseNumber(input.value));
+    input.addEventListener("input", () => {
+      const key = input.dataset.ocrKey;
+      state.ocr[key] = parseNumber(input.value);
+      state.ocrReview[key] = "confirmed";
+      const item=input.closest("[data-ocr-item]");
+      item?.classList.remove("review-warning","review-missing");item?.classList.add("review-confirmed");
+      const badge=item?.querySelector(".ocr-status-badge");if(badge){badge.className="ocr-status-badge confirmed";badge.textContent="확인 완료"}
+      item?.querySelector(".ocr-confirm-button")?.remove();
+    });
   });
+  $$("[data-confirm-ocr]").forEach(button => button.addEventListener("click", () => {
+    state.ocrReview[button.dataset.confirmOcr] = "confirmed";
+    renderOcrResults();
+  }));
 }
 
 async function runOcr() {
@@ -583,6 +599,8 @@ async function runOcr() {
   $("#ocrStatus").textContent = "OCR 준비 중";
   $("#runOcrBtn").disabled = true;
   let fullText = "";
+  const recognized = {};
+  const review = {};
   try {
     for (let i = 0; i < state.images.length; i++) {
       const image = state.images[i];
@@ -595,10 +613,16 @@ async function runOcr() {
         }
       });
       fullText += `\n\n--- ${image.name} ---\n${result.data.text}`;
+      const imageStats = extractStatsFromText(result.data.text);
+      const confidence = Number(result.data.confidence || 0);
+      for (const [key, value] of Object.entries(imageStats)) {
+        recognized[key] = value;
+        review[key] = confidence >= 85 ? "confirmed" : "warning";
+      }
     }
     $("#rawOcrText").value = fullText.trim();
-    const recognized = extractStatsFromText(fullText);
     state.ocr = {...recognized};
+    state.ocrReview = {...review};
     renderOcrResults();
     $("#ocrStatus").textContent = `${Object.keys(recognized).length}개 인식`;
   } catch (error) {
@@ -612,6 +636,8 @@ async function runOcr() {
 
 function applyOcr() {
   if (!Object.keys(state.ocr).length) return alert("적용할 OCR 결과가 없습니다.");
+  const warnings = Object.keys(state.ocr).filter(key => state.ocrReview[key] !== "confirmed");
+  if (warnings.length) return alert(`확인 필요 항목이 ${warnings.length}개 남아 있습니다. 주황색 박스의 값을 확인한 뒤 '이 값 확인 완료'를 눌러 주세요.`);
   state.stats = {...state.stats, ...state.ocr};
   renderStats();
   syncChangeBefore();
@@ -669,7 +695,7 @@ function setupInputs() {
 
   $("#clearImagesBtn").addEventListener("click", () => {
     state.images.forEach(item => URL.revokeObjectURL(item.url));
-    state.images = []; state.ocr = {}; renderImages(); renderOcrResults();
+    state.images = []; state.ocr = {}; state.ocrReview = {}; renderImages(); renderOcrResults();
     $("#rawOcrText").value = ""; $("#ocrStatus").textContent = "OCR 대기";
   });
   $("#runOcrBtn").addEventListener("click", runOcr);
@@ -759,12 +785,13 @@ async function readClipboardImageEntries(){
 async function ocrImageEntries(entries,statusText){
   if(!entries.length)throw new Error("이미지를 먼저 선택하세요.");
   if(!window.Tesseract)throw new Error("OCR 라이브러리를 불러오지 못했습니다.");
-  let text="";
+  let text="",confidenceTotal=0;
   for(let i=0;i<entries.length;i++){
     const result=await Tesseract.recognize(entries[i].file,"kor+eng");
-    text+=`\n--- ${statusText} ${i+1} ---\n${result.data.text}`
+    text+=`\n--- ${statusText} ${i+1} ---\n${result.data.text}`;
+    confidenceTotal+=Number(result.data.confidence||0)
   }
-  return text
+  return {text,confidence:confidenceTotal/entries.length}
 }
 
 function extractOptionLines(text){
@@ -822,9 +849,11 @@ function normalizeOptionRows(rows, count=7){
   const cleaned=(rows||[]).slice(0,count).map(x=>({
     key:x?.key&&STAT_META[x.key]?x.key:"",
     value:Number(x?.value||0),
-    raw:x?.raw||""
+    raw:x?.raw||"",
+    confidence:Number(x?.confidence||0),
+    review:x?.review||"neutral"
   }));
-  while(cleaned.length<count)cleaned.push({key:"",value:0,raw:""});
+  while(cleaned.length<count)cleaned.push({key:"",value:0,raw:"",confidence:0,review:"neutral"});
   return cleaned
 }
 
@@ -851,11 +880,13 @@ function renderSevenRowEditor({selector,source,beforeRows,afterRows,stateKey,tit
     <h4>${title}</h4>
     <p class="small-note">최대 7줄입니다. 오인식된 항목과 수치를 직접 고치세요.</p>
     <div class="option-slot-list">${state[stateKey][name].map((row,i)=>`
-      <div class="option-slot-row ${i===3?"sub-option-start":""}">
+      <div class="option-slot-row review-${row.review} ${i===3?"sub-option-start":""}" data-seven-row="${name}-${i}">
         ${i===3?'<div class="option-group-divider"><span>부옵션</span></div>':''}
         <span class="option-slot-number">${i+1}</span>
         <select data-seven-key="${name}-${i}">${options(row.key)}</select>
         <input data-seven-value="${name}-${i}" type="number" step="any" value="${row.value}">
+        <span class="review-status-badge ${row.review}">${row.review==="warning"?"확인 필요":row.review==="confirmed"?"확인 완료":"미입력"}</span>
+        ${row.review==="warning"?`<button class="review-confirm-button" data-confirm-seven="${name}-${i}" type="button">확인</button>`:""}
         <button class="text-button danger" data-seven-clear="${name}-${i}" type="button">비우기</button>
       </div>`).join("")}</div>
   </section>`;
@@ -898,15 +929,29 @@ function renderSevenRowEditor({selector,source,beforeRows,afterRows,stateKey,tit
   };
 
   box.querySelectorAll("[data-seven-key],[data-seven-value]").forEach(el=>{
-    el.addEventListener("input",sync);el.addEventListener("change",sync)
+    el.addEventListener("input",sync);el.addEventListener("change",()=>{
+      const [name,index]=(el.dataset.sevenKey||el.dataset.sevenValue).split("-");
+      const row=state[stateKey][name][Number(index)];
+      row.review=row.key?"confirmed":"neutral";
+      renderSevenRowEditor({selector,source,beforeRows:state[stateKey].before,afterRows:state[stateKey].after,stateKey,titleA,titleB})
+    })
   });
+  box.querySelectorAll("[data-confirm-seven]").forEach(btn=>btn.addEventListener("click",()=>{
+    const [name,index]=btn.dataset.confirmSeven.split("-");
+    state[stateKey][name][Number(index)].review="confirmed";
+    renderSevenRowEditor({selector,source,beforeRows:state[stateKey].before,afterRows:state[stateKey].after,stateKey,titleA,titleB})
+  }));
   box.querySelectorAll("[data-seven-clear]").forEach(btn=>btn.addEventListener("click",()=>{
     const [name,index]=btn.dataset.sevenClear.split("-");
     box.querySelector(`[data-seven-key="${name}-${index}"]`).value="";
-    box.querySelector(`[data-seven-value="${name}-${index}"]`).value=0;sync()
+    box.querySelector(`[data-seven-value="${name}-${index}"]`).value=0;sync();
+    state[stateKey][name][Number(index)].review="neutral";
+    renderSevenRowEditor({selector,source,beforeRows:state[stateKey].before,afterRows:state[stateKey].after,stateKey,titleA,titleB})
   }));
   box.querySelector("[data-seven-apply]").addEventListener("click",()=>{
     sync();
+    const warnings=[...state[stateKey].before,...state[stateKey].after].filter(row=>row.key&&row.review==="warning");
+    if(warnings.length)return alert(`확인 필요 옵션이 ${warnings.length}줄 남아 있습니다. 주황색 줄의 항목과 수치를 확인한 뒤 '확인'을 눌러 주세요.`);
     const a=sumOptionRows(state[stateKey].before),b=sumOptionRows(state[stateKey].after);
     const keys=[...new Set([...Object.keys(a),...Object.keys(b)])];
     state.pendingOcrDiffs[source]=keys.map(key=>({source,key,before:Number(a[key]||0),after:Number(b[key]||0)}));
@@ -917,7 +962,7 @@ function renderSevenRowEditor({selector,source,beforeRows,afterRows,stateKey,tit
   sync()
 }
 
-function extractOptionRows(text){
+function extractOptionRows(text,confidence=0){
   const rows=[];
   const lines=text.replaceAll("％","%").split(/\r?\n/)
     .map(x=>x.replace(/\s+/g," ").trim()).filter(Boolean);
@@ -926,7 +971,7 @@ function extractOptionRows(text){
       if(!line.includes(label))continue;
       const tail=line.split(label).slice(1).join(label);
       const numbers=tail.match(/[-+]?\d[\d,\s]*(?:\.\d+)?\s*(?:[경조억만])?%?/g);
-      if(numbers?.length)rows.push({key,value:parseNumber(numbers[0]),raw:line});
+      if(numbers?.length)rows.push({key,value:parseNumber(numbers[0]),raw:line,confidence,review:confidence>=85?"confirmed":"warning"});
       break;
     }
   }
@@ -1066,7 +1111,7 @@ function clearChangeSource(source,{clearImages=false,clearPreview=false}={}){
     if(clearPreview){
       const box=$("#equipmentOcrPreview");
       box.className="ocr-change-preview empty-state";
-      box.textContent="OCR 실행 후 A와 B의 인식 결과가 수정 가능한 표로 표시됩니다."
+      box.textContent="이미지 분석 후 A와 B의 인식 후보가 검토 가능한 형태로 표시됩니다."
     }
   }
   if(source==="어빌리티"){
@@ -1079,7 +1124,7 @@ function clearChangeSource(source,{clearImages=false,clearPreview=false}={}){
     if(clearPreview){
       const box=$("#abilityOcrPreview");
       box.className="ocr-change-preview empty-state";
-      box.textContent="OCR 실행 후 A와 B의 6개 옵션이 각각 수정 가능한 형태로 표시됩니다."
+      box.textContent="이미지 분석 후 A와 B의 인식 후보가 각각 검토 가능한 형태로 표시됩니다."
     }
   }
   renderChanges();renderResults();renderLiveImpactPreview();saveLocal()
@@ -1087,8 +1132,10 @@ function clearChangeSource(source,{clearImages=false,clearPreview=false}={}){
 
 async function runEquipmentOcr(){
   try{
-    const before=extractOptionRows(await ocrImageEntries(state.equipmentBeforeImages,"현재 장비 A"));
-    const after=extractOptionRows(await ocrImageEntries(state.equipmentAfterImages,"변경 장비 B"));
+    const beforeResult=await ocrImageEntries(state.equipmentBeforeImages,"현재 장비 A");
+    const afterResult=await ocrImageEntries(state.equipmentAfterImages,"변경 장비 B");
+    const before=extractOptionRows(beforeResult.text,beforeResult.confidence);
+    const after=extractOptionRows(afterResult.text,afterResult.confidence);
     renderSevenRowEditor({
       selector:"#equipmentOcrPreview",source:"장비",beforeRows:before,afterRows:after,
       stateKey:"pendingEquipmentRows",titleA:"현재 장비 A · 최대 7줄",titleB:"변경 장비 B · 최대 7줄"
@@ -1098,8 +1145,10 @@ async function runEquipmentOcr(){
 
 async function runAbilityOcr(){
   try{
-    const before=extractOptionRows(await ocrImageEntries(state.abilityBeforeImages,"현재 어빌 A"));
-    const after=extractOptionRows(await ocrImageEntries(state.abilityAfterImages,"변경 어빌 B"));
+    const beforeResult=await ocrImageEntries(state.abilityBeforeImages,"현재 어빌 A");
+    const afterResult=await ocrImageEntries(state.abilityAfterImages,"변경 어빌 B");
+    const before=extractOptionRows(beforeResult.text,beforeResult.confidence);
+    const after=extractOptionRows(afterResult.text,afterResult.confidence);
     renderSevenRowEditor({
       selector:"#abilityOcrPreview",source:"어빌리티",beforeRows:before,afterRows:after,
       stateKey:"pendingAbilityRows",titleA:"현재 어빌 A · 최대 7줄",titleB:"변경 어빌 B · 최대 7줄"
@@ -1449,18 +1498,31 @@ function detectEquippedMarker(canvas,box){
   for(let i=0;i<data.length;i+=4){const [hue,s,v]=rgbToHsv(data[i],data[i+1],data[i+2]);if(hue>=42&&hue<=82&&s>=.52&&v>=.62)bright++;total++}
   return total>0&&bright/total>=.018
 }
+function companionDetectionReviewState(item){
+  if(!item.companionId)return "missing";
+  if(item.ownedGuess==="unknown"||item.matchConfidence<.58)return "warning";
+  return "confirmed"
+}
+function updateCompanionDetectionRow(item,row){
+  const review=companionDetectionReviewState(item);
+  row.classList.remove("review-neutral","review-warning","review-confirmed","review-missing","low-confidence");
+  row.classList.add(`review-${review}`);
+  const badge=row.querySelector("[data-detection-status]");
+  if(badge){badge.className=`review-status-badge ${review}`;badge.textContent=review==="confirmed"?"확인 완료":review==="warning"?"확인 필요":"동료 선택 필요"}
+}
 function renderCompanionDetectionReview(){
   const box=$("#companionInventoryOcrResult"),items=state.pendingCompanionDetections||[],options=state.companionDb.companions.map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
   if(!items.length){box.className="ocr-change-preview empty-state";box.textContent="색 테두리의 동료 카드를 찾지 못했습니다. 이미지가 잘리지 않았는지 확인하거나 아래 목록에서 직접 입력해 주세요.";return}
   box.className="ocr-change-preview companion-detection-review";
   box.innerHTML=`<div class="import-safety-notice"><strong>적용 전 검토</strong><p>위치가 아닌 테두리 색과 초상화로 찾은 후보입니다. 이름·보유 여부·레벨·E 장착 표시를 확인한 항목만 적용하세요.</p></div>
-    <div class="detection-review-list">${items.map((item,index)=>`<article class="detection-review-row ${item.matchConfidence<.58?"low-confidence":""}"><img src="${item.thumbnail}" alt="감지 카드 ${index+1}"><div class="detection-fields"><label><span>동료</span><select data-detection-companion="${item.id}"><option value="">선택 필요</option>${options}</select></label><label><span>보유 판정</span><select data-detection-owned="${item.id}"><option value="unknown">확인 필요</option><option value="owned">보유</option><option value="unowned">미보유</option></select></label><label><span>레벨</span><input data-detection-level="${item.id}" type="number" inputmode="numeric" min="1" max="${item.cap}" value="${item.level}"></label><label class="equipped-detection"><input data-detection-equipped="${item.id}" type="checkbox" ${item.equipped?"checked":""}><span>현재 장착 E</span></label></div><small>초상화 일치도 ${Math.round(item.matchConfidence*100)}% · 테두리 ${Math.round(item.borderStrength*100)}%</small></article>`).join("")}</div>
+    <div class="detection-review-list">${items.map((item,index)=>`<article class="detection-review-row review-${companionDetectionReviewState(item)}" data-detection-row="${item.id}"><img src="${item.thumbnail}" alt="감지 카드 ${index+1}"><div class="detection-fields"><label><span>동료</span><select data-detection-companion="${item.id}"><option value="">선택 필요</option>${options}</select></label><label><span>보유 판정</span><select data-detection-owned="${item.id}"><option value="unknown">확인 필요</option><option value="owned">보유</option><option value="unowned">미보유</option></select></label><label><span>레벨</span><input data-detection-level="${item.id}" type="number" inputmode="numeric" min="1" max="${item.cap}" value="${item.level}"></label><label class="equipped-detection"><input data-detection-equipped="${item.id}" type="checkbox" ${item.equipped?"checked":""}><span>현재 장착 E</span></label></div><small><span class="review-status-badge ${companionDetectionReviewState(item)}" data-detection-status>${companionDetectionReviewState(item)==="confirmed"?"확인 완료":companionDetectionReviewState(item)==="warning"?"확인 필요":"동료 선택 필요"}</span> 초상화 일치도 ${Math.round(item.matchConfidence*100)}% · 테두리 ${Math.round(item.borderStrength*100)}%</small></article>`).join("")}</div>
     <div class="button-row top-gap"><button class="button primary" id="applyCompanionDetectionsBtn" type="button">검토한 보유·장착 동료 적용</button><button class="button ghost" id="manualCompanionEntryBtn" type="button">목록에서 직접 입력</button></div>`;
-  for(const item of items){const select=box.querySelector(`[data-detection-companion="${item.id}"]`),owned=box.querySelector(`[data-detection-owned="${item.id}"]`);if(item.companionId&&item.matchConfidence>=.58)select.value=item.companionId;owned.value=item.ownedGuess;select.addEventListener("change",()=>item.companionId=select.value);owned.addEventListener("change",()=>item.ownedGuess=owned.value);box.querySelector(`[data-detection-level="${item.id}"]`).addEventListener("change",event=>{item.level=Math.max(1,Math.min(item.cap,Number(event.target.value||1)));event.target.value=item.level});box.querySelector(`[data-detection-equipped="${item.id}"]`).addEventListener("change",event=>item.equipped=event.target.checked)}
+  for(const item of items){const select=box.querySelector(`[data-detection-companion="${item.id}"]`),owned=box.querySelector(`[data-detection-owned="${item.id}"]`),row=box.querySelector(`[data-detection-row="${item.id}"]`);if(item.companionId&&item.matchConfidence>=.58)select.value=item.companionId;owned.value=item.ownedGuess;select.addEventListener("change",()=>{item.companionId=select.value;item.matchConfidence=1;updateCompanionDetectionRow(item,row)});owned.addEventListener("change",()=>{item.ownedGuess=owned.value;updateCompanionDetectionRow(item,row)});box.querySelector(`[data-detection-level="${item.id}"]`).addEventListener("change",event=>{item.level=Math.max(1,Math.min(item.cap,Number(event.target.value||1)));event.target.value=item.level});box.querySelector(`[data-detection-equipped="${item.id}"]`).addEventListener("change",event=>item.equipped=event.target.checked)}
   $("#applyCompanionDetectionsBtn").addEventListener("click",applyCompanionDetections);$("#manualCompanionEntryBtn").addEventListener("click",openCompanionManualEntry)
 }
 function applyCompanionDetections(){
   for(const item of state.pendingCompanionDetections||[]){const companion=$("#companionInventoryOcrResult")?.querySelector(`[data-detection-companion="${item.id}"]`),owned=$("#companionInventoryOcrResult")?.querySelector(`[data-detection-owned="${item.id}"]`),level=$("#companionInventoryOcrResult")?.querySelector(`[data-detection-level="${item.id}"]`),equipped=$("#companionInventoryOcrResult")?.querySelector(`[data-detection-equipped="${item.id}"]`);if(companion)item.companionId=companion.value;if(owned)item.ownedGuess=owned.value;if(level)item.level=Math.max(1,Math.min(item.cap,Number(level.value||1)));if(equipped)item.equipped=equipped.checked}
+  const unresolved=(state.pendingCompanionDetections||[]).filter(item=>companionDetectionReviewState(item)!=="confirmed");if(unresolved.length)return alert(`확인 필요 동료 후보가 ${unresolved.length}개 남아 있습니다. 주황색 또는 붉은색 박스의 동료와 보유 판정을 확인해 주세요.`);
   const reviewed=(state.pendingCompanionDetections||[]).filter(item=>item.companionId&&item.ownedGuess!=="unknown");if(!reviewed.length)return alert("동료 이름과 보유 여부를 확인한 항목이 없습니다.");
   const merged=new Map();for(const item of reviewed){const key=`${item.companionId}::${item.rarity}`,previous=merged.get(key);if(!previous||item.matchConfidence>previous.matchConfidence)merged.set(key,item)}
   const unique=[...merged.values()],equipped=unique.filter(item=>item.ownedGuess==="owned"&&item.equipped);
@@ -1558,7 +1620,9 @@ function setupManualEntryActions() {
   $("#startEquipmentManualBtn")?.addEventListener("click", () => {
     renderSevenRowEditor({selector:"#equipmentOcrPreview",source:"장비",beforeRows:[],afterRows:[],stateKey:"pendingEquipmentRows",titleA:"현재 장비 A",titleB:"변경 장비 B"});
   });
-  $("#startAbilityManualBtn")?.addEventListener("click", () => renderAbilityOcrEditor([], []));
+  $("#startAbilityManualBtn")?.addEventListener("click", () => {
+    renderSevenRowEditor({selector:"#abilityOcrPreview",source:"어빌리티",beforeRows:[],afterRows:[],stateKey:"pendingAbilityRows",titleA:"현재 어빌 A",titleB:"변경 어빌 B"});
+  });
 }
 
 loadLocal();

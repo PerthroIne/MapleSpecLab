@@ -10,12 +10,12 @@
 <meta http-equiv="Expires" content="0"/>
 <meta content="메이플 키우기 스펙 및 옵션 변경 비교 도구" name="description"/>
 <title>메이플 키우기 스펙 연구소</title>
-<link href="./manifest.webmanifest?v=1.1.1" rel="manifest"/>
+<link href="./manifest.webmanifest?v=1.1.2" rel="manifest"/>
 <link href="./assets/brand/representative.png" rel="icon"/>
-<link href="./styles.css?v=1.1.1" rel="stylesheet"/>
+<link href="./styles.css?v=1.1.2" rel="stylesheet"/>
 <script>
 (function(){
-  const BUILD = "1.1.1";
+  const BUILD = "1.1.2";
   const isDev = location.pathname.toLowerCase().includes("maplespeclab-dev");
   if (!isDev) return;
 
@@ -199,7 +199,7 @@
 </div>
 <div class="button-row">
 <button class="button danger ghost" id="clearImagesBtn" type="button">전체 삭제</button>
-<button class="button primary" id="runOcrBtn" type="button">OCR 실행</button>
+<button class="button primary" id="runOcrBtn" type="button">스펙 이미지 분석·적용 준비</button>
 </div>
 </div>
 <div class="image-gallery empty" id="imageGallery">
@@ -328,10 +328,10 @@
 </div>
 <div class="image-change-actions">
 <button class="button ghost" id="startEquipmentManualBtn" type="button">직접 입력 시작</button>
-<button class="button primary" id="runEquipmentOcrBtn" type="button">장비 옵션 불러오기</button>
+<button class="button primary" id="runEquipmentOcrBtn" type="button">장비 이미지 분석·적용 준비</button>
 <button class="button danger ghost" id="clearEquipmentChangesBtn" type="button">장비 변경 초기화</button>
 </div>
-<div class="ocr-change-preview empty-state" id="equipmentOcrPreview">OCR 실행 후 A와 B의 인식 결과가 수정 가능한 표로 표시됩니다.</div>
+<div class="ocr-change-preview empty-state" id="equipmentOcrPreview">이미지 분석 후 A와 B의 인식 후보가 검토 가능한 형태로 표시됩니다.</div>
 </article>
 </div>
 <div class="source-panel" id="source-panel-ability">
@@ -361,10 +361,10 @@
 </div>
 <div class="image-change-actions">
 <button class="button ghost" id="startAbilityManualBtn" type="button">직접 입력 시작</button>
-<button class="button primary" id="runAbilityOcrBtn" type="button">어빌 옵션 불러오기</button>
+<button class="button primary" id="runAbilityOcrBtn" type="button">어빌 이미지 분석·적용 준비</button>
 <button class="button danger ghost" id="clearAbilityChangesBtn" type="button">어빌 변경 초기화</button>
 </div>
-<div class="ocr-change-preview empty-state" id="abilityOcrPreview">OCR 실행 후 A와 B의 최대 7개 옵션이 각각 수정 가능한 형태로 표시됩니다.</div>
+<div class="ocr-change-preview empty-state" id="abilityOcrPreview">이미지 분석 후 A와 B의 최대 7개 인식 후보가 검토 가능한 형태로 표시됩니다.</div>
 </article>
 </div>
 <div class="source-panel" id="source-panel-companion">
@@ -646,7 +646,7 @@
 <article class="panel about-card">
 <h3>버전 정보</h3>
 <dl class="version-list">
-<div><dt>연구소 버전</dt><dd>v1.1.1</dd></div>
+<div><dt>연구소 버전</dt><dd>v1.1.2</dd></div>
 <div><dt>공식 가이드 확인</dt><dd>2026.08.08 (가이드 2026.08.07 최신화)</dd></div>
 <div><dt>비교 모델 기준</dt><dd>Beta 2.0 기반 · 공식 전투력/DPS 아님</dd></div>
 <div><dt>동료 DB</dt><dd>Companion DB v1</dd></div>
@@ -656,7 +656,7 @@
 </div>
 </section>
 </main>
-<footer><span>이미지는 서버로 전송하지 않음</span><span>·</span><span>프로필은 직접 저장·불러오기</span><span>·</span><span>v1.1.1</span><span>·</span><a href="https://maplestoryidle.nexon.com/ko/guide" rel="noopener noreferrer" target="_blank">공식 가이드</a><span>· RELEASE 2026.08.08</span></footer>
+<footer><span>이미지는 서버로 전송하지 않음</span><span>·</span><span>프로필은 직접 저장·불러오기</span><span>·</span><span>v1.1.2</span><span>·</span><a href="https://maplestoryidle.nexon.com/ko/guide" rel="noopener noreferrer" target="_blank">공식 가이드</a><span>· RELEASE 2026.08.08</span></footer>
 </div>
 <dialog class="official-help-dialog" id="officialHelpDialog" aria-labelledby="officialHelpTitle">
 <article>
@@ -672,7 +672,7 @@
 </article>
 </dialog>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-<script src="./official-guide.js?v=1.1.1"></script>
-<script src="./app.js?v=1.1.1"></script>
+<script src="./official-guide.js?v=1.1.2"></script>
+<script src="./app.js?v=1.1.2"></script>
 </body>
 </html>
