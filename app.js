@@ -1,5 +1,5 @@
-const APP_VERSION = "1.0.0-dev.10";
-const BUILD_TIME = "2026-07-24 20:30";
+const APP_VERSION = "1.1.0";
+const BUILD_TIME = "2026-08-08 15:30";
 const STORAGE_KEY = "mapleSpecLabV10Dev5";
 const GITHUB_REPOSITORY = "PerthroIne/MapleSpecLab";
 
@@ -72,6 +72,49 @@ let state = {
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
+
+function officialGuideEntry(key, topic = false) {
+  const guide = window.MAPLE_OFFICIAL_GUIDE;
+  return topic ? guide?.topics?.[key] : guide?.stats?.[key];
+}
+
+function officialHelpButton(key, topic = false, label = "공식 설명 보기") {
+  if (!officialGuideEntry(key, topic)) return "";
+  return `<button class="official-help-button" data-official-help="${key}" data-help-topic="${topic ? "1" : "0"}" type="button" aria-label="${label}" title="${label}">ⓘ</button>`;
+}
+
+function openOfficialHelp(key, topic = false) {
+  const guide = window.MAPLE_OFFICIAL_GUIDE;
+  const entry = officialGuideEntry(key, topic);
+  const dialog = $("#officialHelpDialog");
+  if (!guide || !entry || !dialog) return;
+  $("#officialHelpTitle").textContent = entry.title;
+  $("#officialHelpSummary").textContent = entry.summary;
+  $("#officialHelpDetail").textContent = entry.detail;
+  const cap = $("#officialHelpCap");
+  cap.textContent = entry.cap || "";
+  cap.hidden = !entry.cap;
+  $("#officialHelpSection").textContent = entry.section ? `관련 안내: ${entry.section}` : "";
+  $("#officialHelpLimitation").hidden = !entry.limitation;
+  $("#officialHelpSource").href = guide.sourceUrl;
+  $("#officialHelpSource").textContent = `${guide.sourceLabel}에서 확인`;
+  if (typeof dialog.showModal === "function") dialog.showModal();
+  else dialog.setAttribute("open", "");
+}
+
+function setupOfficialGuideUI() {
+  document.addEventListener("click", event => {
+    const button = event.target.closest("[data-official-help]");
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openOfficialHelp(button.dataset.officialHelp, button.dataset.helpTopic === "1");
+  });
+  $("#officialHelpClose")?.addEventListener("click", () => $("#officialHelpDialog")?.close());
+  $("#officialHelpDialog")?.addEventListener("click", event => {
+    if (event.target === event.currentTarget) event.currentTarget.close();
+  });
+}
 
 function parseNumber(raw) {
   const text = String(raw ?? "").replaceAll(",", "").replaceAll(" ", "").replace("%", "");
@@ -226,25 +269,27 @@ function renderStats() {
   const grid = $("#statsGrid");
   grid.innerHTML = "";
   for (const group of STAT_GROUPS) {
-    const section = document.createElement("section");
+    const section = document.createElement("details");
     section.className = "stat-group panel";
+    section.open = true;
     const fields = group.keys.map(key => {
       const [label, isPercent] = STAT_META[key];
       return `
         <div class="stat-field">
           <label>
-            <span>${label}${isPercent ? '<span class="unit">%</span>' : ""}</span>
+            <span class="stat-label-row"><span>${label}${isPercent ? '<span class="unit">%</span>' : ""}</span>${officialHelpButton(key)}</span>
             <input data-stat-key="${key}" inputmode="decimal" value="${state.stats[key] ?? 0}" aria-label="${label}">
           </label>
         </div>`;
     }).join("");
     section.innerHTML = `
-      <div class="stat-group-heading">
+      <summary class="stat-group-heading">
         <div>
           <h3>${group.title}</h3>
           <p>${group.description}</p>
         </div>
-      </div>
+        <span class="collapse-hint" aria-hidden="true">접기/펼치기</span>
+      </summary>
       <div class="stat-group-grid">${fields}</div>`;
     grid.appendChild(section);
   }
@@ -305,7 +350,7 @@ function renderChanges() {
     const row = document.createElement("tr");
     row.innerHTML = `
       <td>${change.source}</td>
-      <td>${STAT_META[change.key]?.[0] || change.key}</td>
+      <td><span class="table-stat-label">${STAT_META[change.key]?.[0] || change.key}${officialHelpButton(change.key)}</span></td>
       <td class="num">${formatValue(change.key, change.before)}</td>
       <td class="num">${formatValue(change.key, change.after)}</td>
       <td class="num ${delta >= 0 ? "positive" : "negative"}">${delta >= 0 ? "+" : ""}${formatValue(change.key, delta)}</td>
@@ -378,7 +423,7 @@ function currentStateAnalysis(stats) {
 
   return {
     scores,
-    text: `현재 스펙은 ${targetBias}, ${attackStyle} 성향입니다. ${critText} ${rangeText} 표시되는 최종 피해 지수는 동일 계산 모델 안에서 장비·어빌·동료 변경 전후를 비교하기 위한 기준값입니다.`
+    text: `현재 스펙은 ${targetBias}, ${attackStyle} 성향입니다. ${critText} ${rangeText} 표시되는 연구소 비교 지수는 동일 모델 안에서 장비·어빌·동료 변경 전후를 비교하기 위한 참고값이며 공식 전투력이나 실제 DPS가 아닙니다.`
   };
 }
 
@@ -393,7 +438,7 @@ function renderCurrentStateSummary(stats) {
 
   const cardHtml = cards.map(([label, value]) => `
     <article class="metric-card">
-      <span>${label} 최종 피해 지수</span>
+      <span>${label} 비교 지수 ${officialHelpButton("comparisonModel", true)}</span>
       <strong class="positive">${formatDamageIndex(value)}</strong>
     </article>`).join("");
 
@@ -417,15 +462,15 @@ function renderResults() {
   const comp = compare(before, after);
 
   const metrics = [
-    ["보스 스킬 DPS", comp.boss_skill],
-    ["일반몹 스킬 DPS", comp.normal_skill],
-    ["보스 기본공격 DPS", comp.boss_basic],
-    ["일반몹 기본공격 DPS", comp.normal_basic]
+    ["보스 스킬 비교 지수", comp.boss_skill],
+    ["일반몹 스킬 비교 지수", comp.normal_skill],
+    ["보스 기본공격 비교 지수", comp.boss_basic],
+    ["일반몹 기본공격 비교 지수", comp.normal_basic]
   ];
 
   $("#metricCards").innerHTML = metrics.map(([label, value]) => `
     <article class="metric-card">
-      <span>${label} 변화</span>
+      <span>${label} 변화 ${officialHelpButton("comparisonModel", true)}</span>
       <strong class="${value >= 0 ? "positive" : "negative"}">${value >= 0 ? "+" : ""}${value.toFixed(3)}%</strong>
     </article>`).join("");
 
@@ -436,7 +481,7 @@ function renderResults() {
   $("#afterStatsBody").innerHTML = changedKeys.map(key => {
     const delta = after[key] - before[key];
     return `<tr>
-      <td>${STAT_META[key][0]}</td>
+      <td><span class="table-stat-label">${STAT_META[key][0]}${officialHelpButton(key)}</span></td>
       <td class="num">${formatValue(key, before[key])}</td>
       <td class="num">${formatValue(key, after[key])}</td>
       <td class="num ${delta >= 0 ? "positive" : "negative"}">${delta >= 0 ? "+" : ""}${formatValue(key, delta)}</td>
@@ -446,7 +491,7 @@ function renderResults() {
   const contrib = contributionAnalysis(before, after);
   $("#contributionBody").innerHTML = contrib.map(([key, value]) => `
     <tr>
-      <td>${STAT_META[key][0]}</td>
+      <td><span class="table-stat-label">${STAT_META[key][0]}${officialHelpButton(key)}</span></td>
       <td class="num ${value >= 0 ? "positive" : "negative"}">${value >= 0 ? "+" : ""}${value.toFixed(3)}%</td>
     </tr>`
   ).join("") || `<tr><td colspan="2" class="empty-state">분석할 변경이 없습니다.</td></tr>`;
@@ -457,7 +502,7 @@ function renderResults() {
     const normal = comp.normal_skill;
     const top = contrib[0];
     const use = boss > normal + .1 ? "보스용" : normal > boss + .1 ? "사냥용" : "범용";
-    analysis = `보스 스킬 기준 예상 효율은 ${boss >= 0 ? "+" : ""}${boss.toFixed(3)}%, 일반 몬스터 기준은 ${normal >= 0 ? "+" : ""}${normal.toFixed(3)}%입니다. 현재 변화는 ${use} 성향이며, 가장 큰 단독 영향 항목은 '${STAT_META[top[0]][0]}' (${top[1] >= 0 ? "+" : ""}${top[1].toFixed(3)}%)입니다.`;
+    analysis = `연구소 비교 모델에서 보스 스킬 지수 변화는 ${boss >= 0 ? "+" : ""}${boss.toFixed(3)}%, 일반 몬스터 기준은 ${normal >= 0 ? "+" : ""}${normal.toFixed(3)}%입니다. 현재 변화는 ${use} 성향이며, 가장 큰 단독 영향 항목은 '${STAT_META[top[0]][0]}' (${top[1] >= 0 ? "+" : ""}${top[1].toFixed(3)}%)입니다. 실제 전투 결과는 콘텐츠·대상·스킬별 조건에 따라 달라질 수 있습니다.`;
   }
   $("#analysisText").textContent = analysis;
   saveLocal();
@@ -520,7 +565,7 @@ function renderOcrResults() {
     const value = recognized ? state.ocr[key] : 0;
     return `<div class="ocr-item ${recognized ? "" : "ocr-confidence-low"}">
       <label>
-        <span>${meta[0]} <small class="ocr-status-badge ${recognized ? 'recognized' : 'missing'}">${recognized ? '인식됨' : '미인식'}</small></span>
+        <span class="stat-label-row"><span>${meta[0]} <small class="ocr-status-badge ${recognized ? 'recognized' : 'missing'}">${recognized ? '인식됨' : '미인식'}</small></span>${officialHelpButton(key)}</span>
         <input data-ocr-key="${key}" inputmode="decimal" value="${value}">
       </label>
     </div>`;
@@ -1068,20 +1113,20 @@ function renderLiveImpactPreview(){
     ["보스 기본공격",comp.boss_basic],["일반몹 기본공격",comp.normal_basic]
   ];
   $("#liveImpactMetrics").innerHTML=metrics.map(([label,value])=>`
-    <article class="metric-card"><span>${label} 변화</span>
+    <article class="metric-card"><span>${label} 비교 지수 변화 ${officialHelpButton("comparisonModel", true)}</span>
     <strong class="${value>=0?"positive":"negative"}">${value>=0?"+":""}${value.toFixed(3)}%</strong></article>`).join("");
 
   const keys=Object.keys(STAT_META).filter(k=>Number(before[k]||0)!==Number(after[k]||0));
   $("#liveImpactStatsBody").innerHTML=keys.map(key=>{
     const d=after[key]-before[key];
-    return `<tr><td>${STAT_META[key][0]}</td><td class="num">${formatValue(key,before[key])}</td>
+    return `<tr><td><span class="table-stat-label">${STAT_META[key][0]}${officialHelpButton(key)}</span></td><td class="num">${formatValue(key,before[key])}</td>
     <td class="num">${formatValue(key,after[key])}</td>
     <td class="num ${d>=0?"positive":"negative"}">${d>=0?"+":""}${formatValue(key,d)}</td></tr>`
   }).join("")||`<tr><td colspan="4" class="empty-state">변경된 스탯이 없습니다.</td></tr>`;
 
   const contrib=contributionAnalysis(before,after);
   $("#liveImpactAnalysis").textContent=contrib.length
-    ? `현재 스펙에서 가장 큰 영향은 ${STAT_META[contrib[0][0]][0]} (${contrib[0][1]>=0?"+":""}${contrib[0][1].toFixed(3)}%)입니다. 보스 스킬 ${comp.boss_skill>=0?"+":""}${comp.boss_skill.toFixed(3)}%, 일반몹 스킬 ${comp.normal_skill>=0?"+":""}${comp.normal_skill.toFixed(3)}% 변화가 예상됩니다.`
+    ? `연구소 비교 모델에서 가장 큰 영향은 ${STAT_META[contrib[0][0]][0]} (${contrib[0][1]>=0?"+":""}${contrib[0][1].toFixed(3)}%)입니다. 보스 스킬 지수 ${comp.boss_skill>=0?"+":""}${comp.boss_skill.toFixed(3)}%, 일반몹 스킬 지수 ${comp.normal_skill>=0?"+":""}${comp.normal_skill.toFixed(3)}% 변화입니다.`
     : "변경을 추가하면 현재 스펙에 미치는 영향이 표시됩니다.";
 }
 
@@ -1232,9 +1277,10 @@ function renderCompanions(){
     const names={legendary:"레전드",unique:"유니크",epic:"에픽"};
     for(const rarity of ["legendary","unique","epic"]){
       const group=rows.filter(x=>x.rarity===rarity);if(!group.length)continue;
-      const section=document.createElement("section");section.className="companion-rarity-section";
-      section.innerHTML=`<div class="companion-rarity-header"><div class="companion-rarity-title"><span class="rarity-badge ${rarity}">${names[rarity]}</span><span>${group.length}명</span></div>
-      <div class="companion-rarity-actions"><button class="button ghost" data-rarity-own-all="${rarity}" type="button">모두 보유</button><button class="button ghost" data-rarity-own-none="${rarity}" type="button">모두 해제</button></div></div>
+      const section=document.createElement("details");section.className="companion-rarity-section";section.open=true;
+      section.innerHTML=`<summary class="companion-rarity-header"><div class="companion-rarity-title"><span class="rarity-badge ${rarity}">${names[rarity]}</span><span>${group.length}명</span></div>
+      <span class="summary-tools">${officialHelpButton("companions", true, "공식 동료 능력치 설명 보기")}<span class="collapse-hint" aria-hidden="true">접기/펼치기</span></span></summary>
+      <div class="companion-rarity-actions"><button class="button ghost" data-rarity-own-all="${rarity}" type="button">모두 보유</button><button class="button ghost" data-rarity-own-none="${rarity}" type="button">모두 해제</button></div>
       <div class="companion-rarity-cards"></div>`;
       const cards=section.querySelector(".companion-rarity-cards");group.forEach(x=>cards.appendChild(renderCard(x)));box.appendChild(section)
     }
@@ -1457,6 +1503,7 @@ function setupManualEntryActions() {
 
 loadLocal();
 setupTabs();
+setupOfficialGuideUI();
 renderStats();
 renderChangeSelect();
 renderChanges();

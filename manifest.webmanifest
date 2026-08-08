@@ -1,7 +1,7 @@
 {
   "name": "메이플 키우기 스펙 연구소",
   "short_name": "MapleSpecLab",
-  "description": "메이플 키우기 스펙·장비·어빌·동료 비교 연구 도구",
+  "description": "공식 가이드 설명과 연결된 메이플 키우기 스펙·장비·어빌·동료 비교 연구 도구",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
