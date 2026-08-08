@@ -1,5 +1,5 @@
-const APP_VERSION = "1.1.2";
-const BUILD_TIME = "2026-08-08 19:30";
+const APP_VERSION = "1.2.0";
+const BUILD_TIME = "2026-08-08 22:00";
 const STORAGE_KEY = "mapleSpecLabV10Dev5";
 const GITHUB_REPOSITORY = "PerthroIne/MapleSpecLab";
 
@@ -53,6 +53,14 @@ let state = {
   images: [],
   ocr: {},
   ocrReview: {},
+  combatConditions: {
+    useTargetDefense: false,
+    targetDefense: 0,
+    statusMode: "none",
+    battleDuration: 60,
+    statusCount: 0,
+    statusDuration: 0
+  },
   changes: [],
   deferredInstallPrompt: null,
   companionDb: null,
@@ -145,25 +153,31 @@ function formatValue(key, value) {
 
 function factor(p) { return Math.max(0.000001, 1 + Number(p || 0) / 100); }
 
-function damageIndex(stats, target="boss", mode="skill") {
-  const attack = Math.max(1, stats.attack || 0) * factor(stats.attack_pct);
-  const mainStat = Math.max(1, stats.main_stat || 0) * factor(stats.main_stat_pct);
+function statusUptime(conditions=state.combatConditions) {
+  if (conditions.statusMode === "always") return 1;
+  if (conditions.statusMode !== "timed") return 0;
+  const battle = Math.max(.001, Number(conditions.battleDuration || 0));
+  const active = Math.max(0, Number(conditions.statusCount || 0)) * Math.max(0, Number(conditions.statusDuration || 0));
+  return Math.min(1, active / battle);
+}
+
+function damageIndex(stats, target="boss", mode="skill", conditions=state.combatConditions) {
+  const attack = Math.max(0, Number(stats.attack || 0)) * factor(stats.attack_pct);
   const avgMultiplier = Math.max(.000001, ((stats.min_damage || 100) + (stats.max_damage || 100)) / 200);
   const critRate = Math.min(Math.max(stats.critical_rate || 0, 0), 100) / 100;
   const critFactor = 1 + critRate * Math.max(stats.critical_damage || 0, 0) / 100;
   const targetBonus = target === "boss" ? stats.boss_damage : stats.normal_damage;
   const modeBonus = mode === "skill" ? stats.skill_damage : stats.basic_damage;
-  const levelBonus =
-    (stats.mos_level || 0) * .35 +
-    (stats.fourth_level || 0) * .17 +
-    (stats.third_level || 0) * .13 +
-    (stats.all_skill_level || 0) * .13;
-  const speedFactor = Math.max(.000001, Math.min(Math.max(stats.attack_speed || 0, 0), 150) / 100);
-  const penetrationFactor = factor((stats.defense_pen || 0) * .25);
+  const penetration = Math.min(100, Math.max(0, Number(stats.defense_pen || 0))) / 100;
+  const targetDefense = Math.max(0, Number(conditions.targetDefense || 0));
+  const defenseFactor = conditions.useTargetDefense
+    ? 5000 / (targetDefense * (1 - penetration) + 6000)
+    : 1;
+  const statusFactor = 1 + Math.max(0, Number(stats.status_damage || 0)) / 100 * statusUptime(conditions);
 
-  return attack * mainStat * factor(stats.damage) * factor(stats.damage_amp) *
-    avgMultiplier * critFactor * factor(targetBonus) * factor(modeBonus) *
-    factor(levelBonus) * factor(stats.final_damage) * speedFactor * penetrationFactor;
+  return attack * defenseFactor * factor(stats.damage) * factor(stats.damage_amp) *
+    factor(targetBonus) * factor(modeBonus) * critFactor * avgMultiplier *
+    statusFactor * factor(stats.final_damage);
 }
 
 function compare(before, after) {
@@ -394,6 +408,58 @@ function formatDamageIndex(value) {
   return n.toLocaleString("ko-KR", {maximumFractionDigits: 2});
 }
 
+function combatConditionSummary() {
+  const c=state.combatConditions,uptime=statusUptime(c),activeSeconds=c.statusMode==="timed"
+    ? Math.min(Math.max(0,Number(c.battleDuration||0)),Math.max(0,Number(c.statusCount||0))*Math.max(0,Number(c.statusDuration||0)))
+    : c.statusMode==="always"?Math.max(0,Number(c.battleDuration||0)):0;
+  const defense=c.useTargetDefense
+    ? `대상 방어력 ${Number(c.targetDefense||0).toLocaleString("ko-KR")} 적용 · 방어 관통력 반영`
+    : "대상 방어력 미적용 · 방어 관통력 피해 기여 제외";
+  const status=c.statusMode==="always"
+    ? "상태이상 상시 적용 · 적용률 100%"
+    : c.statusMode==="timed"
+      ? `상태이상 ${Number(c.statusCount||0)}회 × ${Number(c.statusDuration||0)}초 · 유효 ${activeSeconds.toFixed(1)}초 · 적용률 ${(uptime*100).toFixed(1)}% (겹침·갱신 미반영)`
+      : "상태이상 미적용 · 상태이상 데미지 제외";
+  return {defense,status,uptime};
+}
+
+function renderCalculationAssumptions(){
+  const summary=combatConditionSummary();
+  const html=`<strong>이번 계산의 전제</strong><ul><li>${summary.defense}</li><li>${summary.status}</li><li>대상의 받는 피해 증가·감소, 일시적 버프·디버프, 콘텐츠 전용 보정은 없음</li><li>스킬 계수·마스터리·직업별 주스탯 변환처럼 입력받지 않은 항목은 미적용</li><li>공격 속도·스킬 레벨은 실제 사용 주기와 스킬별 계수가 없어 단일 타격 피해 지수에서 제외</li><li>크리티컬은 확률 기대값, 최소·최대 데미지 배율은 평균값 적용</li></ul>`;
+  ["#statsCalculationAssumptions","#resultCalculationAssumptions","#liveCalculationAssumptions"].forEach(selector=>{const box=$(selector);if(box)box.innerHTML=html});
+  const uptime=$("#statusUptimePreview");if(uptime)uptime.textContent=summary.status
+}
+
+function syncCombatConditionControls(){
+  const c=state.combatConditions,useDefense=$("#useTargetDefense"),defense=$("#targetDefense"),mode=$("#statusMode"),timed=$("#statusTimedFields");
+  if(useDefense)useDefense.checked=Boolean(c.useTargetDefense);
+  if(defense){defense.value=Number(c.targetDefense||0);defense.disabled=!c.useTargetDefense}
+  if(mode)mode.value=c.statusMode;
+  if(timed)timed.hidden=c.statusMode!=="timed";
+  if($("#battleDuration"))$("#battleDuration").value=Number(c.battleDuration||60);
+  if($("#statusCount"))$("#statusCount").value=Number(c.statusCount||0);
+  if($("#statusDuration"))$("#statusDuration").value=Number(c.statusDuration||0);
+  renderCalculationAssumptions()
+}
+
+function setupCombatConditionActions(){
+  const controls=$$("[data-combat-condition]");
+  const update=(syncControls=true)=>{
+    state.combatConditions={
+      useTargetDefense:Boolean($("#useTargetDefense")?.checked),
+      targetDefense:Math.max(0,Number($("#targetDefense")?.value||0)),
+      statusMode:$("#statusMode")?.value||"none",
+      battleDuration:Math.max(.1,Number($("#battleDuration")?.value||60)),
+      statusCount:Math.max(0,Number($("#statusCount")?.value||0)),
+      statusDuration:Math.max(0,Number($("#statusDuration")?.value||0))
+    };
+    if(syncControls)syncCombatConditionControls();else renderCalculationAssumptions();
+    renderCurrentStateSummary(state.stats);renderLiveImpactPreview();renderResults()
+  };
+  controls.forEach(control=>{control.addEventListener("input",()=>update(false));control.addEventListener("change",()=>update(true))});
+  syncCombatConditionControls()
+}
+
 function currentStateAnalysis(stats) {
   const scores = {
     boss_skill: damageIndex(stats, "boss", "skill"),
@@ -425,7 +491,7 @@ function currentStateAnalysis(stats) {
 
   return {
     scores,
-    text: `현재 스펙은 ${targetBias}, ${attackStyle} 성향입니다. ${critText} ${rangeText} 표시되는 연구소 비교 지수는 동일 모델 안에서 장비·어빌·동료 변경 전후를 비교하기 위한 참고값이며 공식 전투력이나 실제 DPS가 아닙니다.`
+    text: `현재 스펙은 ${targetBias}, ${attackStyle} 성향입니다. ${critText} ${rangeText} 표시값은 공식 가이드의 일반 피해 계산 순서를 우선 적용한 비교용 피해 지수이며, 입력되지 않은 전투 변수는 없는 것으로 계산합니다. 공식 전투력이나 실제 DPS는 아닙니다.`
   };
 }
 
@@ -440,7 +506,7 @@ function renderCurrentStateSummary(stats) {
 
   const cardHtml = cards.map(([label, value]) => `
     <article class="metric-card">
-      <span>${label} 비교 지수 ${officialHelpButton("comparisonModel", true)}</span>
+      <span>${label} 공식식 지수 ${officialHelpButton("comparisonModel", true)}</span>
       <strong class="positive">${formatDamageIndex(value)}</strong>
     </article>`).join("");
 
@@ -458,16 +524,17 @@ function renderCurrentStateSummary(stats) {
 
 function renderResults() {
   renderHomeDashboard();
+  renderCalculationAssumptions();
   const before = {...state.stats};
   const after = getAfterStats();
   renderCurrentStateSummary(before);
   const comp = compare(before, after);
 
   const metrics = [
-    ["보스 스킬 비교 지수", comp.boss_skill],
-    ["일반몹 스킬 비교 지수", comp.normal_skill],
-    ["보스 기본공격 비교 지수", comp.boss_basic],
-    ["일반몹 기본공격 비교 지수", comp.normal_basic]
+    ["보스 스킬 공식식 지수", comp.boss_skill],
+    ["일반몹 스킬 공식식 지수", comp.normal_skill],
+    ["보스 기본공격 공식식 지수", comp.boss_basic],
+    ["일반몹 기본공격 공식식 지수", comp.normal_basic]
   ];
 
   $("#metricCards").innerHTML = metrics.map(([label, value]) => `
@@ -499,13 +566,14 @@ function renderResults() {
   ).join("") || `<tr><td colspan="2" class="empty-state">분석할 변경이 없습니다.</td></tr>`;
 
   let analysis = "적용된 변경사항이 없습니다.";
-  if (contrib.length) {
+  const meaningfulContrib=contrib.filter(([,value])=>Math.abs(value)>1e-9);
+  if (meaningfulContrib.length) {
     const boss = comp.boss_skill;
     const normal = comp.normal_skill;
-    const top = contrib[0];
+    const top = meaningfulContrib[0];
     const use = boss > normal + .1 ? "보스용" : normal > boss + .1 ? "사냥용" : "범용";
-    analysis = `연구소 비교 모델에서 보스 스킬 지수 변화는 ${boss >= 0 ? "+" : ""}${boss.toFixed(3)}%, 일반 몬스터 기준은 ${normal >= 0 ? "+" : ""}${normal.toFixed(3)}%입니다. 현재 변화는 ${use} 성향이며, 가장 큰 단독 영향 항목은 '${STAT_META[top[0]][0]}' (${top[1] >= 0 ? "+" : ""}${top[1].toFixed(3)}%)입니다. 실제 전투 결과는 콘텐츠·대상·스킬별 조건에 따라 달라질 수 있습니다.`;
-  }
+    analysis = `공식 일반 피해식 기준으로 보스 스킬 지수 변화는 ${boss >= 0 ? "+" : ""}${boss.toFixed(3)}%, 일반 몬스터 기준은 ${normal >= 0 ? "+" : ""}${normal.toFixed(3)}%입니다. 현재 변화는 ${use} 성향이며, 가장 큰 단독 영향 항목은 '${STAT_META[top[0]][0]}' (${top[1] >= 0 ? "+" : ""}${top[1].toFixed(3)}%)입니다. 계산 전제에 표시된 미입력 변수는 적용하지 않았습니다.`;
+  } else if(contrib.length) analysis="변경된 항목은 현재 계산 전제에서 단일 타격 피해 지수에 반영되지 않습니다. 아래 계산 전제를 확인해 주세요.";
   $("#analysisText").textContent = analysis;
   saveLocal();
 }
@@ -734,7 +802,7 @@ function setupActions() {
   });
 
   $("#saveProfileBtn").addEventListener("click", () => downloadJson("maple-spec-profile.json", {
-    version: "0.2-web", stats: state.stats, changes: state.changes
+    version: "0.3-web", stats: state.stats, changes: state.changes, combatConditions: state.combatConditions
   }));
   $("#profileFile").addEventListener("change", async e => {
     const file = e.target.files[0]; if (!file) return;
@@ -742,7 +810,8 @@ function setupActions() {
       const data = JSON.parse(await file.text());
       state.stats = {...DEFAULT_STATS, ...(data.stats || data.profile?.stats || {})};
       state.changes = data.changes || [];
-      renderStats(); renderChanges(); renderResults(); syncChangeBefore(); saveLocal();
+      state.combatConditions = {...state.combatConditions, ...(data.combatConditions || {})};
+      syncCombatConditionControls();renderStats(); renderChanges(); renderResults(); syncChangeBefore(); saveLocal();
     } catch { alert("프로필 JSON 형식이 올바르지 않습니다."); }
   });
 
@@ -1157,13 +1226,14 @@ async function runAbilityOcr(){
 }
 
 function renderLiveImpactPreview(){
+  renderCalculationAssumptions();
   const before={...state.stats},after=getAfterStats(),comp=compare(before,after);
   const metrics=[
     ["보스 스킬",comp.boss_skill],["일반몹 스킬",comp.normal_skill],
     ["보스 기본공격",comp.boss_basic],["일반몹 기본공격",comp.normal_basic]
   ];
   $("#liveImpactMetrics").innerHTML=metrics.map(([label,value])=>`
-    <article class="metric-card"><span>${label} 비교 지수 변화 ${officialHelpButton("comparisonModel", true)}</span>
+    <article class="metric-card"><span>${label} 공식식 지수 변화 ${officialHelpButton("comparisonModel", true)}</span>
     <strong class="${value>=0?"positive":"negative"}">${value>=0?"+":""}${value.toFixed(3)}%</strong></article>`).join("");
 
   const keys=Object.keys(STAT_META).filter(k=>Number(before[k]||0)!==Number(after[k]||0));
@@ -1175,9 +1245,10 @@ function renderLiveImpactPreview(){
   }).join("")||`<tr><td colspan="4" class="empty-state">변경된 스탯이 없습니다.</td></tr>`;
 
   const contrib=contributionAnalysis(before,after);
-  $("#liveImpactAnalysis").textContent=contrib.length
-    ? `연구소 비교 모델에서 가장 큰 영향은 ${STAT_META[contrib[0][0]][0]} (${contrib[0][1]>=0?"+":""}${contrib[0][1].toFixed(3)}%)입니다. 보스 스킬 지수 ${comp.boss_skill>=0?"+":""}${comp.boss_skill.toFixed(3)}%, 일반몹 스킬 지수 ${comp.normal_skill>=0?"+":""}${comp.normal_skill.toFixed(3)}% 변화입니다.`
-    : "변경을 추가하면 현재 스펙에 미치는 영향이 표시됩니다.";
+  const meaningful=contrib.filter(([,value])=>Math.abs(value)>1e-9);
+  $("#liveImpactAnalysis").textContent=meaningful.length
+    ? `공식 일반 피해식 기준으로 가장 큰 영향은 ${STAT_META[meaningful[0][0]][0]} (${meaningful[0][1]>=0?"+":""}${meaningful[0][1].toFixed(3)}%)입니다. 보스 스킬 지수 ${comp.boss_skill>=0?"+":""}${comp.boss_skill.toFixed(3)}%, 일반몹 스킬 지수 ${comp.normal_skill>=0?"+":""}${comp.normal_skill.toFixed(3)}% 변화입니다.`
+    : contrib.length?"변경된 항목은 현재 계산 전제에서 단일 타격 피해 지수에 반영되지 않습니다. 계산 전제를 확인해 주세요.":"변경을 추가하면 현재 스펙에 미치는 영향이 표시됩니다.";
 }
 
 
@@ -1587,6 +1658,7 @@ function buildReportBody() {
       viewport: `${window.innerWidth}x${window.innerHeight}`,
       stats: state.stats,
       changes: state.changes,
+      combatConditions: state.combatConditions,
       savedCompanionTeam: state.savedCompanionTeam,
       companionInventory: state.companionInventory
     };
@@ -1631,7 +1703,6 @@ setupOfficialGuideUI();
 renderStats();
 renderChangeSelect();
 renderChanges();
-renderResults();
 renderImages();
 renderOcrResults();
 setupInputs();
@@ -1640,6 +1711,8 @@ setupAdvancedChangeInputs();
 setupAllDropZones();
 setupManualEntryActions();
 setupReportActions();
+setupCombatConditionActions();
+renderResults();
 renderHomeDashboard();
 setupCompanionActions();
 loadCompanionDatabase();

@@ -10,12 +10,12 @@
 <meta http-equiv="Expires" content="0"/>
 <meta content="메이플 키우기 스펙 및 옵션 변경 비교 도구" name="description"/>
 <title>메이플 키우기 스펙 연구소</title>
-<link href="./manifest.webmanifest?v=1.1.2" rel="manifest"/>
+<link href="./manifest.webmanifest?v=1.2.0" rel="manifest"/>
 <link href="./assets/brand/representative.png" rel="icon"/>
-<link href="./styles.css?v=1.1.2" rel="stylesheet"/>
+<link href="./styles.css?v=1.2.0" rel="stylesheet"/>
 <script>
 (function(){
-  const BUILD = "1.1.2";
+  const BUILD = "1.2.0";
   const isDev = location.pathname.toLowerCase().includes("maplespeclab-dev");
   if (!isDev) return;
 
@@ -234,23 +234,24 @@
 <div class="panel-title-row">
 <div>
 <p class="eyebrow">CURRENT DAMAGE</p>
-<h3>현재 스펙 연구소 비교 지수 <button class="official-help-button" data-official-help="comparisonModel" data-help-topic="1" type="button" aria-label="연구소 비교 지수 설명 보기">ⓘ</button></h3>
-<p>입력된 현재 스펙을 동일한 연구소 모델 안에서 비교하기 위한 참고값입니다.</p>
+<h3>현재 스펙 공식식 기준 피해 지수 <button class="official-help-button" data-official-help="comparisonModel" data-help-topic="1" type="button" aria-label="공식식 기준 피해 지수 설명 보기">ⓘ</button></h3>
+<p>공식 가이드의 일반 피해 계산 순서를 우선 적용한 비교용 참고값입니다.</p>
 </div>
 <span class="model-badge">공식 전투력·DPS 아님</span>
 </div>
 <div class="metric-grid current-metric-grid" id="statsCurrentMetricCards"></div>
 <div class="stats-current-bottom">
 <div class="current-main-score">
-<span>대표 연구소 비교 지수</span>
+<span>대표 공식식 기준 피해 지수</span>
 <strong id="statsCurrentMainDamage">0</strong>
-<small>보스 대상 스킬 비교 모델 기준</small>
+<small>보스 대상 · 스킬 계수 1 기준</small>
 </div>
 <p class="stats-current-analysis" id="statsCurrentAnalysisText">
               현재 스펙을 입력하면 분석 결과가 표시됩니다.
             </p>
 </div>
 </article>
+<article class="calculation-assumptions" id="statsCalculationAssumptions"></article>
 <article class="panel current-team-summary">
 <div class="panel-title-row"><div><p class="eyebrow">CURRENT BASELINE</p><h3>현재 사용 중인 동료</h3><p>현재 스펙에 이미 반영된 7명입니다. 추천 시 이 조합과의 차이만 계산합니다.</p></div><button class="button ghost" data-go-tab="companions" type="button">동료 수정</button></div>
 <div class="stats-current-team empty-state" id="statsCurrentCompanionTeam">현재 사용 중인 동료를 등록하지 않았습니다.</div>
@@ -270,6 +271,20 @@
 <button class="button danger ghost" id="clearChangesBtn" type="button">전체 변경 초기화</button>
 </div>
 <article class="official-context-card"><div><strong>옵션 누적 방식 확인</strong><p>대부분은 합산되지만 공격 속도·방어 관통력 등은 남은 상한을 채우는 체감 누적 방식입니다. 단순 A/B 차이와 게임 내 최종 표시는 다를 수 있습니다.</p></div><button class="button ghost" data-official-help="equipment" data-help-topic="1" type="button">공식 기준 보기</button></article>
+<article class="panel combat-condition-panel">
+<div class="panel-title-row"><div><p class="eyebrow">OFFICIAL DAMAGE CONDITIONS</p><h3>공식 피해식 전투 조건</h3><p>확정할 수 없는 전투 변수는 기본적으로 없는 것으로 계산합니다.</p></div><button class="official-help-button" data-official-help="comparisonModel" data-help-topic="1" type="button" aria-label="공식 피해식 설명 보기">ⓘ</button></div>
+<div class="combat-condition-grid">
+<label class="condition-toggle"><input data-combat-condition id="useTargetDefense" type="checkbox"><span><strong>대상 방어력 적용</strong><small>끄면 방어력과 방어 관통력의 피해 기여를 모두 제외합니다.</small></span></label>
+<label><span>대상 방어력</span><input data-combat-condition id="targetDefense" min="0" inputmode="numeric" type="number" value="0"></label>
+<label><span>상태이상 적용</span><select data-combat-condition id="statusMode"><option value="none">미적용</option><option value="always">상시 적용</option><option value="timed">횟수·시간으로 계산</option></select></label>
+</div>
+<div class="status-timed-fields" id="statusTimedFields" hidden>
+<label><span>전체 전투시간(초)</span><input data-combat-condition id="battleDuration" min="0.1" step="0.1" type="number" value="60"></label>
+<label><span>적용 횟수</span><input data-combat-condition id="statusCount" min="0" step="1" type="number" value="0"></label>
+<label><span>1회 유지시간(초)</span><input data-combat-condition id="statusDuration" min="0" step="0.1" type="number" value="0"></label>
+</div>
+<p class="status-uptime-preview" id="statusUptimePreview">상태이상 미적용</p>
+</article>
 <div class="change-source-tabs">
 <button class="source-tab active" data-source-panel="manual" type="button">수동 입력</button>
 <button class="source-tab" data-source-panel="equipment" type="button">장비 이미지</button>
@@ -437,6 +452,7 @@
 </div>
 <div class="impact-analysis-text" id="liveImpactAnalysis">변경을 추가하면 영향 분석이 표시됩니다.</div>
 </div>
+<div class="calculation-assumptions" id="liveCalculationAssumptions"></div>
 </article>
 </section>
 <section class="tab-panel" id="tab-results">
@@ -444,7 +460,7 @@
 <div>
 <p class="eyebrow">CURRENT &amp; COMPARISON REPORT</p>
 <h2>현재 상태 및 변경 전후 분석</h2>
-<p>현재 스펙의 연구소 비교 지수를 먼저 확인한 뒤 변경 전후의 상대 변화를 비교합니다.</p>
+<p>현재 스펙의 공식식 기준 피해 지수를 먼저 확인한 뒤 변경 전후의 상대 변화를 비교합니다.</p>
 </div>
 <button class="button primary" id="runCompareBtn2" type="button">다시 계산</button>
 </div>
@@ -452,17 +468,17 @@
 <div class="panel-title-row">
 <div>
 <p class="eyebrow">CURRENT STATE</p>
-<h3>현재 스펙 연구소 비교 지수 <button class="official-help-button" data-official-help="comparisonModel" data-help-topic="1" type="button" aria-label="연구소 비교 지수 설명 보기">ⓘ</button></h3>
-<p>현재 입력값을 동일한 연구소 모델 안에서 비교하기 위한 참고값입니다.</p>
+<h3>현재 스펙 공식식 기준 피해 지수 <button class="official-help-button" data-official-help="comparisonModel" data-help-topic="1" type="button" aria-label="공식식 기준 피해 지수 설명 보기">ⓘ</button></h3>
+<p>공식 가이드의 일반 피해 계산 순서를 우선 적용한 비교용 참고값입니다.</p>
 </div>
 <span class="model-badge">공식 전투력·DPS 아님</span>
 </div>
 <div class="metric-grid current-metric-grid" id="currentMetricCards"></div>
 <div class="current-detail-grid">
 <div class="current-main-score">
-<span>대표 연구소 비교 지수</span>
+<span>대표 공식식 기준 피해 지수</span>
 <strong id="currentMainDamage">0</strong>
-<small>보스 대상 스킬 비교 모델 기준</small>
+<small>보스 대상 · 스킬 계수 1 기준</small>
 </div>
 <div class="current-analysis-text">
 <h3>현재 상태 분석</h3>
@@ -470,6 +486,7 @@
 </div>
 </div>
 </article>
+<article class="calculation-assumptions" id="resultCalculationAssumptions"></article>
 <div class="comparison-divider"><span>변경 전후 비교</span></div>
 <div class="metric-grid" id="metricCards"></div>
 <div class="results-grid">
@@ -590,7 +607,7 @@
 <article class="panel guide-card"><div class="guide-step">STEP 6</div><h3>데이터 보관</h3><div class="guide-rule"></div><p>입력값은 자동으로 복원되지 않습니다. 다시 사용할 데이터는 상단의 프로필 저장으로 JSON 백업을 만든 뒤 직접 불러오세요.</p></article>
 </div>
 <article class="panel official-guide-overview">
-<div class="panel-title-row"><div><p class="eyebrow">OFFICIAL GUIDE REFERENCE</p><h3>연구소에서 적용한 공식 기준</h3><p>2026년 8월 7일 최신화된 공식 가이드를 2026년 8월 8일 확인해 연결했습니다.</p></div><a class="button ghost" href="https://maplestoryidle.nexon.com/ko/guide" rel="noopener noreferrer" target="_blank">공식 가이드 열기</a></div>
+<div class="panel-title-row"><div><p class="eyebrow">OFFICIAL GUIDE REFERENCE</p><h3>연구소에서 적용한 공식 기준</h3><p>2026년 8월 8일 최신화된 공식 가이드를 2026년 8월 8일 확인해 연결했습니다.</p></div><a class="button ghost" href="https://maplestoryidle.nexon.com/ko/guide" rel="noopener noreferrer" target="_blank">공식 가이드 열기</a></div>
 <div class="official-fact-grid">
 <button data-official-help="attack_speed" type="button"><strong>공격 속도</strong><span>체감 누적 · 상한 150%</span></button>
 <button data-official-help="defense_pen" type="button"><strong>방어 관통력</strong><span>체감 누적 · 적용 상한 100%</span></button>
@@ -600,7 +617,7 @@
 <button data-official-help="comparisonModel" data-help-topic="1" type="button"><strong>연구소 지수</strong><span>공식 전투력·실제 DPS 아님</span></button>
 </div>
 </article>
-<article class="notice-card source-notice guide-source"><strong>출처와 한계</strong><p>능력치 설명과 전투 규칙은 <a href="https://maplestoryidle.nexon.com/ko/guide" rel="noopener noreferrer" target="_blank">메이플 키우기 공식 가이드</a>를 기준으로 요약했습니다. 연구소 비교 모델의 뿌리는 <a href="https://kimprincess-calculator.netlify.app/" rel="noopener noreferrer" target="_blank">최종뎀 계산기 Beta 2.0</a>이며, 공식 전투식 전체 또는 실제 DPS를 재현하지 않습니다.</p></article>
+<article class="notice-card source-notice guide-source"><strong>출처와 한계</strong><p>능력치 설명과 피해 비교 계산은 <a href="https://maplestoryidle.nexon.com/ko/guide" rel="noopener noreferrer" target="_blank">메이플 키우기 공식 가이드</a>의 누적 방식과 일반 피해 공식을 우선 적용합니다. 공식 정보만으로 처리하기 어려운 기존 항목과 호환성은 <a href="https://kimprincess-calculator.netlify.app/" rel="noopener noreferrer" target="_blank">최종뎀 계산기 Beta 2.0</a>을 보조 참고했습니다. 입력되지 않은 전투 변수는 없는 것으로 계산하며 실제 DPS를 보장하지 않습니다.</p></article>
 </section>
 <section class="tab-panel" id="tab-report">
 <div class="section-heading report-heading"><div><p class="eyebrow">BUG REPORT</p><h2>오류 및 의견 제보</h2><p>아래 내용을 작성하면 MapleSpecLab GitHub Issue 작성 화면이 열립니다. 전송 전 미리보기에서 포함 내용을 확인할 수 있습니다.</p></div></div>
@@ -635,8 +652,8 @@
 <article class="panel about-card">
 <h3>계산식 출처</h3>
 <p><strong>공식 설명:</strong> 능력치 정의, 누적 방식, 상한, 전투 규칙은 <a href="https://maplestoryidle.nexon.com/ko/guide" rel="noopener noreferrer" target="_blank">메이플 키우기 공식 가이드</a>를 기준으로 연결했습니다.</p>
-<p><strong>연구소 비교 모델:</strong> 기존 피해 비교 계산은 <a href="https://kimprincess-calculator.netlify.app/" rel="noopener noreferrer" target="_blank">최종뎀 계산기 Beta 2.0</a>을 토대로 연구소 목적에 맞게 수정했습니다.</p>
-<p>공식 가이드도 전투력과 실전 결과가 다를 수 있다고 안내합니다. MapleSpecLab은 공식 전투력 계산기나 실제 DPS 계산기가 아니며, 콘텐츠 보정·대상 방어력·스킬별 특성 등 미입력 요소가 있어 결과를 보장하지 않습니다.</p>
+<p><strong>피해 비교 계산:</strong> 공식 가이드의 일반 피해 계산 순서를 기본 모델로 적용하고, 공식 정보만으로 처리하기 어려운 기존 항목과 프로필 호환 부분에 한해 <a href="https://kimprincess-calculator.netlify.app/" rel="noopener noreferrer" target="_blank">최종뎀 계산기 Beta 2.0</a>을 보조 참고했습니다.</p>
+<p>공식 가이드도 전투력과 실전 결과가 다를 수 있다고 안내합니다. MapleSpecLab은 공식 전투력 계산기나 실제 DPS 계산기가 아닙니다. 대상 방어력은 선택 입력이며, 콘텐츠 보정·스킬별 특성 등 입력하지 않은 요소는 없는 것으로 계산하고 결과 전제에 표시합니다.</p>
 </article>
 <article class="panel about-card">
 <h3>개인정보 처리</h3>
@@ -646,9 +663,9 @@
 <article class="panel about-card">
 <h3>버전 정보</h3>
 <dl class="version-list">
-<div><dt>연구소 버전</dt><dd>v1.1.2</dd></div>
-<div><dt>공식 가이드 확인</dt><dd>2026.08.08 (가이드 2026.08.07 최신화)</dd></div>
-<div><dt>비교 모델 기준</dt><dd>Beta 2.0 기반 · 공식 전투력/DPS 아님</dd></div>
+<div><dt>연구소 버전</dt><dd>v1.2.0</dd></div>
+<div><dt>공식 가이드 확인</dt><dd>2026.08.08 (가이드 2026.08.08 최신화)</dd></div>
+<div><dt>비교 모델 기준</dt><dd>공식 일반 피해식 우선 · Beta 2.0 보조 참고</dd></div>
 <div><dt>동료 DB</dt><dd>Companion DB v1</dd></div>
 <div><dt>배포 단계</dt><dd>공식 가이드 연동 공개 후보</dd></div>
 </dl>
@@ -656,7 +673,7 @@
 </div>
 </section>
 </main>
-<footer><span>이미지는 서버로 전송하지 않음</span><span>·</span><span>프로필은 직접 저장·불러오기</span><span>·</span><span>v1.1.2</span><span>·</span><a href="https://maplestoryidle.nexon.com/ko/guide" rel="noopener noreferrer" target="_blank">공식 가이드</a><span>· RELEASE 2026.08.08</span></footer>
+<footer><span>이미지는 서버로 전송하지 않음</span><span>·</span><span>프로필은 직접 저장·불러오기</span><span>·</span><span>v1.2.0</span><span>·</span><a href="https://maplestoryidle.nexon.com/ko/guide" rel="noopener noreferrer" target="_blank">공식 가이드</a><span>· RELEASE 2026.08.08</span></footer>
 </div>
 <dialog class="official-help-dialog" id="officialHelpDialog" aria-labelledby="officialHelpTitle">
 <article>
@@ -666,13 +683,13 @@
 <p class="official-help-summary" id="officialHelpSummary"></p>
 <p id="officialHelpDetail"></p>
 <strong class="official-cap" id="officialHelpCap" hidden></strong>
-<p class="official-limitation" id="officialHelpLimitation" hidden>연구소 비교 지수에 직접 반영되지 않거나 단순화된 요소입니다. 게임 내 최신 안내와 실제 전투 결과를 우선하세요.</p>
+<p class="official-limitation" id="officialHelpLimitation" hidden>공식식 기준 피해 지수에 직접 반영되지 않거나 단순화된 요소입니다. 게임 내 최신 안내와 실제 전투 결과를 우선하세요.</p>
 <p class="small-note" id="officialHelpSection"></p>
 <a class="button primary" id="officialHelpSource" href="https://maplestoryidle.nexon.com/ko/guide" rel="noopener noreferrer" target="_blank">공식 가이드에서 확인</a>
 </article>
 </dialog>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
-<script src="./official-guide.js?v=1.1.2"></script>
-<script src="./app.js?v=1.1.2"></script>
+<script src="./official-guide.js?v=1.2.0"></script>
+<script src="./app.js?v=1.2.0"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-# MapleSpecLab v1.1.2 배포 순서
+# MapleSpecLab v1.2.0 배포 순서
 
 대상은 GitHub Desktop의 공개 저장소 `MapleSpecLab`입니다. `MapleSpecLab-Dev`가 아닙니다.
 
@@ -19,10 +19,10 @@
 
 1. GitHub Desktop으로 돌아가 `Changes` 목록을 확인합니다.
 2. 최소한 `index.html`, `app.js`, `official-guide.js`, `styles.css`, `version.json`, `README.md`, `CHANGELOG.md`, `DEPLOYMENT_GUIDE.md`가 보이는지 확인합니다.
-3. `Summary`에 `Release v1.1.2 - OCR review states`를 입력합니다.
+3. `Summary`에 `Release v1.2.0 - official damage formula`를 입력합니다.
 4. `Description`에 다음을 입력합니다.
 
-   `다중 동료 이미지, 초상화·테두리 기반 검토, E 장착 표시 연동 추가`
+   `공식 일반 피해식 우선 모델, 대상 방어력과 상태이상 전투 조건 추가`
 
 5. `Commit to main`을 누릅니다.
 
@@ -35,16 +35,16 @@
 ## 5. 공개 페이지 확인
 
 1. GitHub Pages 주소를 새 탭 또는 모바일 브라우저에서 엽니다.
-2. 브라우저에 이전 화면이 남으면 강력 새로고침하거나 주소 뒤에 `?v=1.1.2`를 붙여 확인합니다.
-3. 정보 메뉴에서 `v1.1.2`와 공식 가이드 확인일이 보이는지 확인합니다.
-4. 현재 스펙의 `ⓘ`, 도움말의 공식 기준 카드, 동료 등급 접기/펼치기를 확인합니다.
+2. 브라우저에 이전 화면이 남으면 강력 새로고침하거나 주소 뒤에 `?v=1.2.0`을 붙여 확인합니다.
+3. 정보 메뉴에서 `v1.2.0`과 공식 가이드 확인일이 보이는지 확인합니다.
+4. 장비·어빌 메뉴에서 대상 방어력과 상태이상 조건을 바꿔 결과 전제가 갱신되는지 확인합니다.
 
 ## 6. GitHub Release 만들기
 
 1. 저장소 웹페이지에서 `Releases` → `Draft a new release`를 엽니다.
-2. `Choose a tag`에 `v1.1.2`를 입력하고 새 태그를 만듭니다.
-3. 제목은 `MapleSpecLab v1.1.2`로 입력합니다.
-4. 본문에는 `CHANGELOG.md`의 v1.1.2 항목을 붙여넣습니다.
+2. `Choose a tag`에 `v1.2.0`을 입력하고 새 태그를 만듭니다.
+3. 제목은 `MapleSpecLab v1.2.0`으로 입력합니다.
+4. 본문에는 `CHANGELOG.md`의 v1.2.0 항목을 붙여넣습니다.
 5. 필요하면 제공된 완성본 ZIP을 Release 첨부 파일로 추가합니다.
 6. `Publish release`를 누릅니다.
 
